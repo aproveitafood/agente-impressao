@@ -1,0 +1,77 @@
+#!/bin/bash
+
+# Halt on first error
+set -e
+
+TARGET_DIR="/opt/"
+LOG_FILE="${install.log}"
+
+if [ "$(id -u)" != "0" ]; then
+    if [ "$1" == "--user" ]; then
+        TARGET_DIR="$HOME/.local/opt/"
+        LOG_FILE="/tmp/$USER-${project.datadir}-install.log"
+        echo -e "Installing as '$USER' to '$TARGET_DIR'...\n"
+    else
+        echo "This script should be run with root (sudo) privileges.  Call with '-- --user' to ignore." 1>&2
+        exit 1
+    fi
+fi
+
+# Console colors
+RED="\\x1B[1;31m";GREEN="\\x1B[1;32m";YELLOW="\\x1B[1;33m";PLAIN="\\x1B[0m"
+
+# Statuses
+SUCCESS="   [${GREEN}success${PLAIN}]"
+FAILURE="   [${RED}failure${PLAIN}]"
+WARNING="   [${YELLOW}warning${PLAIN}]"
+
+mask=755
+
+echo -e "Starting install...\n"
+
+# Clear the log for writing
+> "$LOG_FILE"
+
+run_task () {
+    echo -e "Running $1 task..."
+    if [ -n "$DEBUG" ]; then
+        "./${project.filename}" $@ && ret_val=$? || ret_val=$?
+    else
+        "./${project.filename}" $@ &>> "$LOG_FILE" && ret_val=$? || ret_val=$?
+    fi
+
+    if [ $ret_val -eq 0 ]; then
+        echo -e "   $SUCCESS Task $1 was successful"
+    else
+        if [ "$1" == "spawn" ]; then
+            echo -e "   $WARNING Task $1 skipped.  You'll have to start ${project.name} manually."
+            return
+        fi
+        echo -e "   $FAILURE Task $1 failed.\n\nRe-run with DEBUG=true for more information."
+        false # throw error
+    fi
+}
+
+# Ensure java is installed and working before starting
+"./${project.filename}" --version
+
+# Make a temporary jar for preliminary installation steps
+run_task preinstall
+
+run_task install --dest "$TARGET_DIR/${project.filename}"
+
+# We should be installed now, generate the certificate
+pushd "$TARGET_DIR/${project.filename}" &> /dev/null
+run_task certgen
+
+# Tell the desktop to look for new mimetypes in the background
+umask_bak="$(umask)"
+umask 0002 # more permissive umask for mimetype registration
+update-desktop-database &> /dev/null &
+umask "$umask_bak"
+
+echo "Installation complete... Starting ${project.name}..."
+# spawn itself as a regular user, inheriting environment
+run_task spawn "$TARGET_DIR/${project.filename}/${project.filename}"
+
+popd &> /dev/null

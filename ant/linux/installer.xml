@@ -1,0 +1,73 @@
+<project name="linux-installer" basedir="../../">
+    <property file="ant/project.properties"/>
+    <property file="ant/linux/linux.properties"/>
+    <import file="${basedir}/ant/version.xml"/>
+    <import file="${basedir}/ant/platform-detect.xml"/>
+
+    <target name="build-run" depends="get-version,platform-detect">
+        <echo level="info">Creating installer using makeself</echo>
+
+        <!-- Get the os-preferred name for the target architecture -->
+        <condition property="linux.target.arch" value="arm64">
+            <isset property="target.arch.aarch64"/>
+        </condition>
+        <property name="linux.target.arch" value="${target.arch}" description="fallback value"/>
+
+        <copy file="assets/branding/linux-icon.svg" tofile="${dist.dir}/${project.filename}.svg"/>
+
+        <mkdir dir="${build.dir}/scripts"/>
+        <copy file="ant/linux/linux-installer.sh.in" tofile="${dist.dir}/install">
+            <filterchain><expandproperties/></filterchain>
+        </copy>
+
+        <copy file="ant/unix/unix-launcher.sh.in" tofile="${dist.dir}/${project.filename}">
+            <filterchain><expandproperties/></filterchain>
+        </copy>
+
+        <copy file="ant/unix/unix-uninstall.sh.in" tofile="${dist.dir}/uninstall">
+            <filterchain><expandproperties/></filterchain>
+        </copy>
+
+        <chmod perm="a+x" type="file">
+            <fileset dir="${dist.dir}">
+                <include name="**/${project.filename}"/>
+                <include name="**/install"/>
+                <include name="**/uninstall"/>
+            </fileset>
+        </chmod>
+
+        <exec executable="makeself" failonerror="true">
+            <arg value="${dist.dir}"/>
+            <arg value="${out.dir}/${project.filename}${build.type}-${build.version}-${linux.target.arch}.run"/>
+            <arg value="${project.name} Installer"/>
+            <arg value="./install"/>
+        </exec>
+    </target>
+
+    <target name="copy-solibs" if="target.os.linux">
+        <echo level="info">Copying native library files to libs</echo>
+
+        <mkdir dir="${dist.dir}/libs"/>
+        <copy todir="${dist.dir}/libs" flatten="true" verbose="true">
+            <fileset dir="${out.dir}/libs-temp">
+                <!--x86_64-->
+                <include name="**/linux-x86-64/*" if="target.arch.x86_64"/> <!-- jna/hid4java -->
+                <include name="**/linux-x86_64/*" if="target.arch.x86_64"/> <!-- usb4java -->
+                <include name="**/linux_64/*" if="target.arch.x86_64"/> <!-- jssc -->
+                <include name="**/natives/*-x86_64.so" if="target.arch.x86_64"/> <!-- flatlaf -->
+                <!--aarch64-->
+                <include name="**/linux-aarch64/*" if="target.arch.aarch64"/> <!-- jna/hid4java/usb4java -->
+                <include name="**/linux_arm64/*" if="target.arch.aarch64"/> <!-- jssc -->
+                <include name="**/natives/*-arm64.so" if="target.arch.aarch64"/> <!-- flatlaf -->
+                <!--arm32-->
+                <include name="**/linux-arm/*" if="target.arch.arm32"/> <!-- jna/hid4java/usb4java -->
+                <include name="**/linux_arm/*" if="target.arch.arm32"/> <!-- jssc -->
+                <!--riscv64-->
+                <include name="**/linux-riscv64/*" if="target.arch.riscv64"/> <!-- jna/hid4java -->
+                <include name="**/linux_riscv64/*" if="target.arch.riscv64"/> <!-- jssc -->
+                <!--all-->
+                <include name="*.so"/> <!-- javafx -->
+            </fileset>
+        </copy>
+    </target>
+</project>

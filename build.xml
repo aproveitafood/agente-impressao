@@ -1,0 +1,429 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<project name="qz" default="distribute" basedir="." xmlns:ivy="antlib:org.apache.ivy.ant">
+    <property file="ant/project.properties"/>
+    <property file="ant/dependencies.properties"/>
+    <import file="ant/platform-detect.xml"/>
+    <import file="ant/signing.xml"/>
+    <import file="ant/apple/installer.xml"/>
+    <import file="ant/linux/installer.xml"/>
+    <import file="ant/windows/installer.xml"/>
+
+    <!-- Add Ivy Tasks -->
+    <taskdef uri="antlib:org.apache.ivy.ant" resource="org/apache/ivy/ant/antlib.xml">
+        <classpath>
+            <fileset dir="ant/deps/manual">
+                <include name="ivy*.jar"/>
+            </fileset>
+        </classpath>
+    </taskdef>
+
+    <!-- Fixes some odd empty directory issues -->
+    <defaultexcludes remove="**/.DS_Store"/>
+
+    <target name="distribute" depends="init,quick-clean,build-jar,override-authcert,build-demo,whitelist-certs">
+        <echo level="info">Process complete</echo>
+    </target>
+
+    <target name="init">
+        <echo message="Building ${project.filename} using JDK ${ant.java.version}"/>
+    </target>
+
+    <target name="clean" depends="init">
+        <delete dir="${out.dir}" includeemptydirs="true" defaultexcludes="false" followSymlinks="false" removeNotFollowedSymlinks="true"/>
+    </target>
+
+    <target name="check-updates" depends="ivy-deps">
+        <ivy:checkdepsupdate showTransitive="false" revisionToCheck="latest.release" />
+    </target>
+
+    <target name="show-dependencies" depends="ivy-deps">
+        <ivy:dependencytree />
+    </target>
+
+    <target name="clean-ivy-cache" if="ivy.clean.cache">
+        <ivy:cleancache/>
+    </target>
+
+    <!-- Libraries to be bundled with the main application -->
+    <target name="ivy-deps" depends="platform-detect,clean-ivy-cache,ivy-ant-deps">
+        <ivy:settings file="ant/ivy-settings.xml"/>
+        <ivy:resolve file="ant/ivy.xml"/>
+        <ivy:report/>
+        <ivy:retrieve pattern="${ivy.lib.dir}/[artifact]-[revision](-[classifier]).[ext]" sync="true"/>
+    </target>
+
+    <!-- Libraries used solely by ant -->
+    <target name="ivy-ant-deps" depends="clean-ivy-cache">
+        <ivy:settings file="ant/ivy-settings.xml"/>
+        <ivy:resolve file="ant/deps/ivy-ant.xml"/>
+        <ivy:retrieve pattern="${ant.lib.dir}/[artifact]-[revision](-[classifier]).[ext]" sync="true"/>
+
+        <!-- Add TestNG Tasks -->
+        <path id="testng.classpath">
+            <fileset dir="${ant.lib.dir}">
+                <include name="*.jar"/>
+            </fileset>
+        </path>
+        <taskdef resource="testngtasks" classpathref="testng.classpath"/>
+    </target>
+
+    <target name="quick-clean">
+        <!-- Cleanup lingering files (for other OS installers) -->
+        <delete includeemptydirs="true" defaultexcludes="false" failonerror="false" followSymlinks="false" removeNotFollowedSymlinks="true">
+            <fileset dir="${out.dir}">
+                <include name="**/**"/>
+                <exclude name="**/jlink/**"/>
+                <exclude name="**/dist/provision/**"/>
+            </fileset>
+        </delete>
+    </target>
+
+    <target name="compile-socket" depends="init,ivy-deps">
+        <mkdir dir="${build.dir}/${project.filename}"/>
+
+        <!-- classpath to re-use for compilation, tests, etc -->
+        <path id="main.classpath">
+            <pathelement location="${build.dir}/${project.filename}"/>
+
+            <fileset dir="${lib.dir}">
+                <include name="**/*.jar"/>
+            </fileset>
+        </path>
+
+        <javac destdir="${build.dir}/${project.filename}" source="${javac.source}" target="${javac.target}" includeantruntime="false" encoding="UTF-8" debug="true">
+            <src path="${src.dir}"/>
+            <classpath refid="main.classpath"/>
+            <compilerarg value="-Xlint:-options"/>
+        </javac>
+
+        <!-- Include non-class files from src in build directory -->
+        <copy todir="${build.dir}/${project.filename}">
+            <fileset dir="${src.dir}" excludes="**/*.java"/>
+        </copy>
+
+        <copy todir="${dist.dir}">
+            <fileset file="LICENSE.txt"/>
+        </copy>
+    </target>
+
+    <target name="compile-tests" depends="compile-socket">
+        <mkdir dir="${build.dir}/test"/>
+        <echo level="info">Test sources: ${test.dir}</echo>
+        <echo level="info">Test classes: ${build.dir}/test</echo>
+
+        <javac destdir="${build.dir}/test" source="${javac.source}" target="${javac.target}" includeantruntime="false" encoding="UTF-8" debug="true">
+            <src path="${test.dir}"/>
+            <classpath refid="main.classpath"/>
+            <classpath refid="testng.classpath"/>
+            <compilerarg value="-Xlint:-options"/>
+        </javac>
+
+        <!-- Include any non-source files -->
+        <copy todir="${build.dir}/test">
+            <fileset dir="${test.dir}" excludes="**/*.java"/>
+        </copy>
+
+        <path id="unit.test.classpath">
+            <path refid="testng.classpath"/>
+            <path refid="main.classpath"/>
+            <pathelement location="${build.dir}/test"/>
+        </path>
+
+        <!-- Integration tests must use the jar file directly -->
+        <path id="integration.test.classpath">
+            <path refid="testng.classpath"/>
+            <path location="${dist.dir}/${project.filename}.jar"/>
+            <pathelement location="${build.dir}/test"/>
+        </path>
+    </target>
+
+    <target name="build-jar" depends="compile-socket,copy-libs,externalize-libs">
+        <echo level="info">Building jar</echo>
+
+        <!-- Strip jlink-incompat files -->
+        <echo level="info">Stripping jlink-incompatible files</echo>
+        <jar compress="${jar.compress}" index="${jar.index}" destfile="${dist.dir}/${project.filename}.jar" duplicate="preserve">
+            <fileset dir="${build.dir}/${project.filename}"/>
+            <!-- Some root level files will cause jlink to fail, they need to be cleaned up -->
+            <fileset dir="${out.dir}/libs-temp" excludes="*.class,LICENSE,jetty-dir.css,about.html,Log4j-*"/>
+            <manifest>
+                <attribute name="Application-Name" value="${project.name}"/>
+                <attribute name="Main-Class" value="qz.App"/>
+                <attribute name="Permissions" value="all-permissions"/>
+                <attribute name="Multi-Release" value="true"/>
+            </manifest>
+        </jar>
+        <delete dir="${out.dir}/libs-temp" includeemptydirs="true" defaultexcludes="false"/>
+
+        <antcall target="sign-jar">
+            <param name="sign.file" value="${dist.dir}/${project.filename}.jar"/>
+        </antcall>
+    </target>
+
+    <target name="externalize-libs" if="separate.static.libs" depends="copy-dylibs,copy-dlls,copy-solibs">
+        <!-- Strip embedded, native resources -->
+        <delete>
+            <fileset dir="${out.dir}/libs-temp">
+                <include name="**/*.jnilib"/>
+                <include name="**/*.dylib"/>
+                <include name="**/*.dll"/>
+                <include name="**/*.so"/>
+                <include name="**/*.a"/>
+            </fileset>
+        </delete>
+
+        <!-- Delete empty files-->
+        <delete includeemptydirs="true" defaultexcludes="false">
+            <fileset dir="${out.dir}/libs-temp">
+                <and>
+                    <size value="0"/>
+                    <type type="dir"/>
+                </and>
+            </fileset>
+        </delete>
+    </target>
+
+    <target name="copy-libs">
+        <!-- Calculate usable javafx exclude value -->
+        <condition property="host.javafx.exclude" value="this-will-never-match">
+            <equals arg1="${host.javafx.platform}" arg2="${target.javafx.platform}"/>
+        </condition>
+        <property description="fallback value" name="host.javafx.exclude" value="${host.javafx.platform}"/>
+
+        <!-- Copy platform independent third-party libs -->
+        <mkdir dir="${out.dir}/libs-temp"/>
+        <unzip dest="${out.dir}/libs-temp" overwrite="false">
+            <fileset dir="${lib.dir}">
+                <include name="**/*.jar"/>
+                <!-- Excludes host javafx natives if cross-compiling -->
+                <exclude name="**/javafx-${host.javafx.exclude}*.jar"/>
+            </fileset>
+        </unzip>
+
+        <!-- Remove files that can/did collide during unpacking -->
+        <delete includeemptydirs="true" failonerror="false">
+            <fileset dir="${out.dir}/libs-temp">
+                <include name="LICENSE*"/>
+                <include name="README*"/>
+                <include name="**/META-INF/**"/>
+                <!-- Used by SecurityInfo.getMavenVersions() -->
+                <exclude name="**/META-INF/maven/**"/>
+                <!-- Required by log4j -->
+                <exclude name="**/META-INF/**/apache/logging/**"/>
+                <exclude name="**/META-INF/services/**"/>
+            </fileset>
+        </delete>
+
+        <!-- Remove unused files from icu4j (saves about 10 MB) -->
+        <!-- See also https://github.com/qzind/tray/pull/339#issuecomment-404385229 -->
+        <delete failonerror="false">
+            <fileset dir="${out.dir}/libs-temp">
+                <!-- icu4j -->
+                <include name="**/brkitr/*.brk"/>
+                <include name="**/brkitr/*.dict"/>
+                <include name="**/col/ucadata.icu"/>
+                <include name="**/icudata/unames.icu"/>
+                <include name="**/icudata/*.spp"/>
+                <include name="**/icudata/**/*.res"/>
+                <exclude name="**/icudata/**/en*.res"/>
+                <exclude name="**/icudata/**/ar*.res"/>
+
+                <!-- icu4j-charset -->
+                <include name="**/icudata/*cns-11643-1992.cnv*"/>
+                <include name="**/icudata/*ebcdic-xml-us.cnv*"/>
+                <include name="**/icudata/*euc-jp-2007.cnv*"/>
+                <include name="**/icudata/*euc-tw-2014.cnv*"/>
+                <include name="**/icudata/*gb18030.cnv*"/>
+                <include name="**/icudata/*ibm-1363_P11B-1998.cnv*"/>
+                <include name="**/icudata/*ibm-1364_P110-2007.cnv*"/>
+                <include name="**/icudata/*ibm-1371_P100-1999.cnv*"/>
+                <include name="**/icudata/*ibm-1373_P100-2002.cnv*"/>
+                <include name="**/icudata/*ibm-1375_P100-2008.cnv*"/>
+                <include name="**/icudata/*ibm-1383_P110-1999.cnv*"/>
+                <include name="**/icudata/*ibm-1386_P100-2001.cnv*"/>
+                <include name="**/icudata/*ibm-1388_P103-2001.cnv*"/>
+                <include name="**/icudata/*ibm-1390_P110-2003.cnv*"/>
+            </fileset>
+        </delete>
+
+        <!-- Merge META-INF/services from TCVN-3, icu4j-charset-slim -->
+        <!-- find the icu4j-charset-slim jar -->
+        <path id="icu4j-slim.found">
+            <first>
+                <fileset dir="${lib.dir}">
+                    <include name="**/icu4j-charset-*.jar"/>
+                </fileset>
+            </first>
+        </path>
+        <pathconvert property="icu4j-slim.path" refid="icu4j-slim.found"/>
+
+        <!-- find the TCVN-3 jar -->
+        <path id="tcvn-3.found">
+            <first>
+                <fileset dir="${lib.dir}">
+                    <include name="**/TCVN-3*.jar"/>
+                </fileset>
+            </first>
+        </path>
+        <pathconvert property="tcvn-3.path" refid="tcvn-3.found"/>
+
+        <!-- merge service entries for CharsetProvider -->
+        <concat destfile="${out.dir}/libs-temp/META-INF/services/java.nio.charset.spi.CharsetProvider" fixlastline="true">
+            <zipentry zipfile="${icu4j-slim.path}" name="META-INF/services/java.nio.charset.spi.CharsetProvider"/>
+            <zipentry zipfile="${tcvn-3.path}" name="META-INF/services/java.nio.charset.spi.CharsetProvider"/>
+        </concat>
+
+        <!-- Merge META-INF/services from jbig2, jpeg2000 and TwelveMonkeys -->
+        <!-- find the pdfbox jar -->
+        <path id="jbig2.found">
+            <first>
+                <fileset dir="${lib.dir}/">
+                    <include name="**/jbig2*.jar"/>
+                </fileset>
+            </first>
+        </path>
+        <pathconvert property="jbig2.path" refid="jbig2.found"/>
+
+        <!-- find the TwelveMonkeys jar -->
+        <path id="imageio-jpeg.found">
+            <first>
+                <fileset dir="${lib.dir}/">
+                    <include name="**/imageio-jpeg*.jar"/>
+                </fileset>
+            </first>
+        </path>
+        <pathconvert property="imageio-jpeg.path" refid="imageio-jpeg.found"/>
+
+        <!-- find the jpeg2000 jar -->
+        <path id="imageio-jpeg2000.found">
+            <first>
+                <fileset dir="${lib.dir}/">
+                    <include name="**/jai-imageio-jpeg2000*.jar"/>
+                </fileset>
+            </first>
+        </path>
+        <pathconvert property="imageio-jpeg2000.path" refid="imageio-jpeg2000.found"/>
+
+        <!-- merge service entries for ImageReaderSpi -->
+        <concat destfile="${out.dir}/libs-temp/META-INF/services/javax.imageio.spi.ImageReaderSpi" fixlastline="true">
+            <zipentry zipfile="${jbig2.path}" name="META-INF/services/javax.imageio.spi.ImageReaderSpi"/>
+            <zipentry zipfile="${imageio-jpeg.path}" name="META-INF/services/javax.imageio.spi.ImageReaderSpi"/>
+            <zipentry zipfile="${imageio-jpeg2000.path}" name="META-INF/services/javax.imageio.spi.ImageReaderSpi"/>
+        </concat>
+    </target>
+
+    <!-- install override.crt for "community" branded builds -->
+    <target name="override-authcert" if="authcert.use">
+        <echo level="info">Bundling with manual cert for signing auth: ${authcert.use}</echo>
+        <!-- See also: Constants.OVERRIDE_CERT -->
+        <property description="suppress-property-warning" name="authcert.use" value="override.crt"/>
+        <copy file="${authcert.use}" tofile="${dist.dir}/override.crt" overwrite="true"/>
+    </target>
+
+    <!-- install certs to "whitelist" directory for whitelabel builds -->
+    <target name="whitelist-certs" depends="build-demo" if="whitelist.use">
+        <echo level="info">Copying certificate(s) to dist/whitelist: ${whitelist.use}</echo>
+        <!-- See also: Constants.WHITELIST_CERT_DIR -->
+
+        <mkdir dir="${dist.dir}/whitelist"/>
+        <property description="suppress property warning" name="whitelist.use" value=""/>
+        <copy file="${whitelist.use}" todir="${dist.dir}/whitelist" overwrite="true"/>
+    </target>
+
+    <target name="build-demo" depends="init" unless="dist.minimal">
+        <property description="suppress-property-warning" name="demo.dir" value="${dist.dir}/demo"/>
+        <echo level="info">Copying demo resource files to ${demo.dir}</echo>
+
+        <!-- Create the demo folder -->
+        <delete dir="${demo.dir}" failonerror="false"/>
+        <copy todir="${demo.dir}">
+            <fileset file="sample.html"/>
+            <fileset dir="${basedir}" includes="css/**"/>
+            <fileset dir="${basedir}" includes="fonts/**"/>
+            <fileset dir="${basedir}" includes="js/**/*.js"/>
+            <fileset dir="${basedir}" includes="assets/**">
+                <exclude name="**/branding/"/>
+            </fileset>
+        </copy>
+
+        <!-- Handle sample.html renaming -->
+        <property description="suppress-property-warning" name="sample.name" value="sample.html"/>
+        <move file="${demo.dir}/sample.html" tofile="${demo.dir}/${sample.name}"/>
+    </target>
+
+    <target description="This task is deprecated" name="include-assets" depends="build-demo">
+        <echo level="warn">The "include-assets" task is deprecated, please use "build-demo" instead.</echo>
+    </target>
+
+    <target name="check-provision" if="provision.file">
+        <property description="suppress property warning" name="provision.file" value=""/>
+        <available file="${provision.file}" property="provision.file.exists"/>
+        <fail message="Provision file was provided but not found: '${provision.file}'" unless="provision.file.exists"/>
+        <echo level="info">Found provision file '${provision.file}' calling 'provision --json [...]'</echo>
+    </target>
+
+    <target name="clean-provision" depends="check-provision" unless="skip.clean.provision">
+        <delete dir="${provision.dir}" includeemptydirs="true" defaultexcludes="false"/>
+    </target>
+
+    <target name="provision" depends="check-provision,clean-provision" if="provision.file.exists">
+        <java jar="${dist.dir}/${project.filename}.jar" fork="true" failonerror="true">
+            <arg value="provision"/>
+            <arg value="--json"/>
+            <arg value="${provision.file}"/>
+            <arg value="--target-os"/>
+            <arg value="${target.os}"/>
+            <arg value="--target-arch"/>
+            <arg value="${target.arch}"/>
+        </java>
+    </target>
+
+    <target name="download-jre" unless="jre.skip">
+        <condition property="target.os" value="windows">
+            <isset property="target.os.windows"/>
+        </condition>
+        <condition property="target.os" value="mac">
+            <isset property="target.os.mac"/>
+        </condition>
+        <property description="target.os default" name="target.os" value="linux"/>
+        <property name="jlink.java.target" value="" description="fallback value"/>
+
+        <echo level="info">Downloading and bundling the jre for ${target.os}</echo>
+        <java jar="${dist.dir}/${project.filename}.jar" fork="true" failonerror="true">
+            <syspropertyset>
+                <!-- Expose all jlink properties to the environment -->
+                <propertyref prefix="jlink."/>
+            </syspropertyset>
+            <arg value="jlink"/>
+            <arg line="--platform ${target.os}"/>
+            <arg line="--arch ${target.arch}"/>
+            <arg line="--vendor ${jlink.java.vendor}"/>
+            <arg line="--version ${jlink.java.version}"/>
+            <arg line="--gc ${jlink.java.gc}"/>
+            <arg line="--gcversion ${jlink.java.gc.version}"/><!-- openj9 only -->
+            <!-- If specified, takes precedence over the above values-->
+            <arg line="--targetjdk ${jlink.java.target}"/>
+        </java>
+    </target>
+
+    <target name="nsis" depends="get-target-arch,target-os-windows,distribute,provision,download-jre,build-exe"/>
+    <target name="pkgbuild" depends="get-target-arch,target-os-mac,distribute,provision,download-jre,build-pkg"/>
+    <target name="dmg" depends="get-target-arch,target-os-mac,distribute,provision,download-jre,build-dmg"/>
+    <target name="makeself" depends="get-target-arch,target-os-linux,distribute,provision,download-jre,build-run"/>
+
+    <target name="testng" depends="unit-tests,integration-tests"/>
+
+    <target name="unit-tests" depends="compile-tests">
+        <property description="Pattern for TestNG classes" name="testng.pattern" value="**"/>
+        <testng suitename="ant" testname="ant" listeners="qz.testng.ConciseSkipListener" classpathref="unit.test.classpath" haltOnFailure="true" verbose="2" outputdir="${out.dir}/report/unit">
+            <classfileset dir="${build.dir}/test" includes="${testng.pattern}" excludes="**/integration/**/*.class"/>
+        </testng>
+    </target>
+
+    <target name="integration-tests" depends="build-jar,compile-tests">
+        <testng suitename="ant" testname="ant" listeners="qz.testng.ConciseSkipListener" classpathref="integration.test.classpath" haltOnFailure="true" verbose="2" outputdir="${out.dir}/report/integration">
+            <classfileset dir="${build.dir}/test" includes="**/integration/**/*.class"/>
+        </testng>
+    </target>
+</project>

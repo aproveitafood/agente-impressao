@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+# Shared launcher for MacOS and Linux
+# Parameters -- if any -- are passed on to the app
+
+# Halt on first error
+set -e
+
+# Configured by ant at build time
+JAVA_MIN="${javac.target}"
+LAUNCH_OPTS="${launch.opts}"
+ABOUT_TITLE="${project.name}"
+PROPS_FILE="${project.filename}"
+
+# Get working directory
+DIR=$(cd "$(dirname "$0")" && pwd)
+pushd "$DIR" &> /dev/null
+
+# Console colors
+RED="\\x1B[1;31m";GREEN="\\x1B[1;32m";YELLOW="\\x1B[1;33m";PLAIN="\\x1B[0m"
+
+# Statuses
+SUCCESS="   [${GREEN}success${PLAIN}]"
+FAILURE="   [${RED}failure${PLAIN}]"
+WARNING="   [${YELLOW}warning${PLAIN}]"
+MESSAGE="   [${YELLOW}message${PLAIN}]"
+
+echo "Looking for Java..."
+
+# Honor JAVA_HOME
+if [ -n "$JAVA_HOME" ]; then
+    echo -e "$WARNING JAVA_HOME was detected, using $JAVA_HOME..."
+    PATH="$JAVA_HOME/bin:$PATH"
+fi
+
+# Always prefer relative runtime/jre
+if [[ "$DIR" == *"/Contents/MacOS"* ]]; then
+    PATH="$DIR/../PlugIns/Java.runtime/Contents/Home/bin:$PATH"
+else
+    PATH="$DIR/runtime/bin:$DIR/jre/bin:$PATH"
+fi
+
+# Check for user overridable launch options
+if [ -n "${dollar}${launch.overrides}" ]; then
+  echo -e "$MESSAGE Picked up additional launch options: ${dollar}${launch.overrides}"
+  LAUNCH_OPTS="$LAUNCH_OPTS ${dollar}${launch.overrides}"
+fi
+
+# Fallback on some known locations
+if ! command -v java > /dev/null ; then
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+      # Apple: Fallback on system-wide install
+      DEFAULTS_READ=$(defaults read ${apple.bundleid} ${launch.overrides} 2>/dev/null) || true
+      if [ -n "$DEFAULTS_READ" ]; then
+            echo -e "$MESSAGE Picked up additional launch options: $DEFAULTS_READ"
+            LAUNCH_OPTS="$LAUNCH_OPTS $DEFAULTS_READ"
+      fi
+      MAC_PRIMARY="/usr/libexec/java_home"
+      MAC_FALLBACK="/Library/Internet Plug-Ins/JavaAppletPlugin.plugin/Contents/Home/bin"
+      echo "Trying $MAC_PRIMARY..."
+      if "$MAC_PRIMARY" -v $JAVA_MIN+ &>/dev/null; then
+          echo -e "$SUCCESS Using \"$MAC_PRIMARY -v $JAVA_MIN+ --exec\" to launch $ABOUT_TITLE"
+          java() {
+              "$MAC_PRIMARY" -v $JAVA_MIN+ --exec java "$@"
+          }
+      elif [ -d "/Library/Internet Plug-Ins/JavaAppletPlugin.plugin/Contents/Home/bin" ]; then
+          echo -e "$WARNING No luck using $MAC_PRIMARY"
+          echo "Trying $MAC_FALLBACK..."
+          java() {
+              "$MAC_FALLBACK/java" "$@"
+          }
+      fi
+  else
+       # Linux/Unix: Fallback on known install location(s)
+       PATH="$PATH:/usr/java/latest/bin/"
+  fi
+fi
+
+if command -v java > /dev/null ; then
+    echo -e "$SUCCESS Java was found: $(command -v java)"
+else
+    echo -e "$FAILURE Please install Java $JAVA_MIN or higher to continue"
+    exit 1
+fi
+
+# Verify the bundled Java version actually works
+if test -f "$DIR/runtime/bin/java" ; then
+    echo "Verifying the bundled Java version can run on this platform..."
+    if "$DIR/runtime/bin/java" -version &> /dev/null ; then
+        echo -e "$SUCCESS Bundled Java version is OK"
+    else
+        echo -e "$FAILURE Sorry, this version of $ABOUT_TITLE cannot be installed on this system:\n"
+        file "$DIR/runtime/bin/java"
+        exit 1
+    fi
+fi
+
+# Make sure Java version is sufficient
+echo "Verifying the Java version is $JAVA_MIN+..."
+curver=$(java -version 2>&1 | grep -i version | awk -F"\"" '{ print $2 }' | awk -F"." '{ print $1 "." $2 }')
+minver="$JAVA_MIN"
+if [ -z "$curver" ]; then
+    curver="0.0"
+fi
+desired=$(echo -e "$minver\n$curver")
+actual=$(echo "$desired" |sort -t '.' -k 1,1 -k 2,2 -n)
+if [ "$desired" != "$actual" ]; then
+    echo -e "$FAILURE Please install Java $JAVA_MIN or higher to continue"
+    exit 1
+else
+    echo -e "$SUCCESS Java $curver was detected"
+fi
+
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    LAUNCH_OPTS="$LAUNCH_OPTS ${apple.launch.opts}"
+else
+    LAUNCH_OPTS="$LAUNCH_OPTS ${linux.launch.opts}"
+fi
+
+if command -v java &>/dev/null; then
+    echo -e "$ABOUT_TITLE is starting..."
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        java $LAUNCH_OPTS -Xdock:name="$ABOUT_TITLE" -Xdock:icon="$DIR/../Resources/$PROPS_FILE.icns" -jar -Dapple.awt.UIElement="true" -Dapple.awt.enableTemplateImages="${java.mask.tray}" -Dapple.awt.application.appearance="system" "$DIR/../Resources/${prefix}$PROPS_FILE.jar" -NSRequiresAquaSystemAppearance False "$@"
+    else
+        java $LAUNCH_OPTS -jar "$PROPS_FILE.jar" "$@"
+    fi
+else
+    echo -e "$FAILURE Java $JAVA_MIN+ was not found"
+fi
+
+popd &>/dev/null

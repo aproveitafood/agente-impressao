@@ -1,0 +1,188 @@
+<project name="windows-installer" basedir="../../">
+    <property file="ant/project.properties"/>
+    <property file="ant/windows/windows.properties"/>
+    <import file="${basedir}/ant/version.xml"/>
+    <import file="${basedir}/ant/platform-detect.xml"/>
+    <import file="${basedir}/ant/signing.xml"/>
+    <property environment="env"/>
+
+    <target name="copy-nsis-plugins" depends="find-nsisbin">
+        <property name="plugins.path" value="${out.dir}/nsis/Plugins"/>
+        <mkdir dir="${plugins.path}"/>
+
+        <!--
+        ========================
+        Project-specific Plugins
+        ========================
+        -->
+        <echo message="Copying NSIS project-specific Plugins: ant/windows/nsis/Plugins"/>
+        <copy todir="${plugins.path}" verbose="true">
+            <fileset dir="ant/windows/nsis/Plugins">
+                <include name="**/*.dll"/>
+                <include name="**/*.exe"/>
+            </fileset>
+        </copy>
+
+        <!--
+        ===================
+        System-wide Plugins
+        ===================
+        -->
+        <!-- Call makensis -HDRINFO to get environment details -->
+        <exec executable="${nsisbin}" outputproperty="nsisbin.output">
+            <arg value="-HDRINFO"/>
+        </exec>
+
+        <!-- Extract "NSISDIR" -->
+        <loadresource property="nsisdir.path">
+            <propertyresource name="nsisbin.output"/>
+            <filterchain>
+                <linecontainsregexp>
+                    <regexp pattern="NSISDIR="/>
+                </linecontainsregexp>
+                <replaceregex pattern=".*NSISDIR=([^,]+).*" replace="\1" flags="s"/>
+                <striplinebreaks/>
+            </filterchain>
+        </loadresource>
+        <property name="nsisdir.path" value="error occurred" description="fallback value"/>
+
+        <!-- Merge system-wide "x86-unicode" files directly into "Release_Unicode" -->
+        <echo message="Copying NSIS system-wide Plugins: ${nsisdir.path}/Plugins"/>
+        <copy todir="${plugins.path}/Release_Unicode" verbose="true" overwrite="false">
+            <fileset dir="${nsisdir.path}/Plugins">
+                <include name="**/*-unicode/*.*"/>
+            </fileset>
+            <mapper type="flatten"/>
+        </copy>
+
+        <!-- Merge system-wide "x86-ansi" files directly into "Release_ANSI" -->
+        <copy todir="${plugins.path}/Release_ANSI" verbose="true" overwrite="false">
+            <fileset dir="${nsisdir.path}/Plugins">
+                <include name="**/*-ansi/*.*"/>
+            </fileset>
+            <mapper type="flatten"/>
+        </copy>
+    </target>
+
+    <target name="sign-nsis-plugins" depends="copy-nsis-plugins">
+        <!-- Sign Plugins before NSIS bundles them -->
+        <fileset dir="${plugins.path}" id="plugins.dlls">
+            <include name="**/*.dll"/>
+            <include name="**/*.exe"/>
+        </fileset>
+
+        <!-- Pass all files at once, wrapped in quotes -->
+        <pathconvert pathsep="&quot; &quot;" property="plugins.dlls.separated" refid="plugins.dlls"/>
+        <antcall target="sign-file">
+            <param name="sign.file" value="&quot;${plugins.dlls.separated}&quot;"/>
+        </antcall>
+    </target>
+
+    <target name="build-exe" depends="get-version,platform-detect,sign-nsis-plugins">
+        <!-- Get the os-preferred name for the target architecture -->
+        <condition property="windows.target.arch" value="arm64">
+            <isset property="target.arch.aarch64"/>
+        </condition>
+        <property name="windows.target.arch" value="x86_64" description="fallback value"/>
+
+        <!-- Sign Libs and Runtime -->
+        <fileset dir="${dist.dir}/" id="win.sign.found">
+            <include name="**/*.dll"/>
+            <include name="**/*.exe"/>
+            <exclude name="provision/**"/>
+        </fileset>
+        <!-- Pass all files at once, wrapped in quotes -->
+        <pathconvert pathsep="&quot; &quot;" property="win.sign.separated" refid="win.sign.found"/>
+        <antcall target="sign-file">
+            <param name="sign.file" value="&quot;${win.sign.separated}&quot;"/>
+        </antcall>
+
+        <!-- Launcher -->
+        <antcall target="config-compile-sign">
+            <param name="nsis.script.in" value="windows-launcher.nsi.in"/>
+            <param name="nsis.outfile" value="${dist.dir}/${project.filename}.exe"/>
+        </antcall>
+
+        <!-- Debug Launcher -->
+        <copy file="ant/windows/windows-launcher.nsi.in" tofile="ant/windows/windows-debug-launcher.nsi.in" overwrite="true"/>
+        <replace file="ant/windows/windows-debug-launcher.nsi.in" token="$javaw" value="$java"/>
+        <replace file="ant/windows/windows-debug-launcher.nsi.in" token="/assets/branding/windows-icon.ico" value="/ant/windows/nsis/console.ico"/>
+        <antcall target="config-compile-sign">
+            <param name="nsis.script.in" value="windows-debug-launcher.nsi.in"/>
+            <param name="nsis.outfile" value="${dist.dir}/${project.filename}-console.exe"/>
+        </antcall>
+
+        <!-- Uninstaller -->
+        <antcall target="config-compile-sign">
+            <param name="nsis.script.in" value="windows-uninstaller.nsi.in"/>
+            <param name="nsis.outfile" value="${dist.dir}/uninstall.exe"/>
+        </antcall>
+
+        <!-- Installer (bundles dist/ payload) -->
+        <antcall target="config-compile-sign">
+            <param name="nsis.script.in" value="windows-installer.nsi.in"/>
+            <param name="nsis.outfile" value="${out.dir}/${project.filename}${build.type}-${build.version}-${windows.target.arch}.exe"/>
+        </antcall>
+    </target>
+
+    <target name="config-compile-sign" depends="find-nsisbin">
+        <echo level="info">Creating ${nsis.outfile} using ${nsisbin}</echo>
+
+        <!-- Calculate file name without suffix  -->
+        <basename property="nsis.script.out" file="${nsis.script.in}" suffix=".in"/>
+
+        <!-- Configure the nsi script with ant parameters -->
+        <copy file="ant/windows/${nsis.script.in}" tofile="${build.dir}/${nsis.script.out}" overwrite="true">
+            <filterchain><expandproperties/></filterchain>
+        </copy>
+
+        <!-- Create the exe -->
+        <exec executable="${nsisbin}" failonerror="true">
+            <arg value="${build.dir}/${nsis.script.out}"/>
+        </exec>
+
+        <!-- Sign the exe -->
+        <antcall target="sign-file">
+            <param name="sign.file" value="${nsis.outfile}"/>
+        </antcall>
+    </target>
+
+    <target name="find-nsisbin" depends="nsisbin-from-unix,nsisbin-from-32,nsisbin-from-64"/>
+
+    <!-- Linux makensis -->
+    <target name="nsisbin-from-unix" unless="env.windir">
+        <property name="nsisbin" value="makensis"/>
+    </target>
+
+    <!-- Win32 makensis -->
+    <target name="nsisbin-from-32" unless="env.ProgramFiles(x86)">
+        <property description="suppress property warning" name="env.ProgramFiles" value="C:/Program Files"/>
+        <property name="nsisbin" value="${env.ProgramFiles}/NSIS/makensis.exe"/>
+    </target>
+
+    <!-- Win64 makensis -->
+    <target name="nsisbin-from-64" if="env.ProgramFiles(x86)">
+        <property description="suppress property warning" name="env.ProgramFiles(x86)" value="C:/Program Files (x86)"/>
+        <property name="nsisbin" value="${env.ProgramFiles(x86)}/NSIS/makensis.exe"/>
+    </target>
+
+    <target name="copy-dlls" if="target.os.windows">
+        <echo level="info">Copying native library files to libs</echo>
+        <copy todir="${dist.dir}/libs" flatten="true" verbose="true">
+            <fileset dir="${out.dir}/libs-temp">
+                <!--x86_64-->
+                <include name="**/win32-x86-64/*" if="target.arch.x86_64"/> <!-- jna/hid4java -->
+                <include name="**/windows-x86_64/*" if="target.arch.x86_64"/> <!-- usb4java -->
+                <include name="**/windows_64/*" if="target.arch.x86_64"/> <!-- jssc -->
+                <include name="**/natives/*-x86_64.dll" if="target.arch.x86_64"/> <!-- flatlaf -->
+                <!--aarch64-->
+                <include name="**/win32-aarch64/*" if="target.arch.aarch64"/> <!-- jna/hid4java -->
+                <include name="**/windows-aarch64/*" if="target.arch.aarch64"/> <!-- usb4java -->
+                <include name="**/windows_arm64/*" if="target.arch.aarch64"/> <!-- jssc -->
+                <include name="**/natives/*-arm64.dll" if="target.arch.aarch64"/> <!-- flatlaf -->
+                <!--all-->
+                <include name="*.dll"/> <!-- javafx -->
+            </fileset>
+        </copy>
+    </target>
+</project>

@@ -1,0 +1,397 @@
+<project name="apple-installer" basedir="../../" xmlns:if="ant:if">
+    <property file="ant/project.properties"/>
+    <import file="${basedir}/ant/version.xml"/>
+    <import file="${basedir}/ant/platform-detect.xml"/>
+
+    <!--
+    ################################################################
+    #                     Apple Installer                          #
+    ################################################################
+    -->
+
+    <target name="build-pkg" depends="get-identity,add-certificates,get-version,platform-detect">
+        <echo level="info">Creating installer using pkgbuild</echo>
+        <!--
+        #####################################
+        #  Create scripts, payload and pkg  #
+        #####################################
+        -->
+
+        <mkdir dir="${build.dir}/scripts/payload"/>
+
+        <!-- Get the os-preferred name for the target architecture -->
+        <condition property="apple.target.arch" value="arm64">
+            <isset property="target.arch.aarch64"/>
+        </condition>
+        <property name="apple.target.arch" value="x86_64" description="fallback value"/>
+
+        <!-- Build app without sandboxing by default-->
+        <property name="build.sandboxed" value="false"/>
+        <antcall target="build-app">
+            <param name="bundle.dir" value="${build.dir}/scripts/payload/${project.name}.app"/>
+        </antcall>
+        <!-- Add a break in the logs -->
+        <antcall target="packaging"/>
+
+        <!-- scripts/ -->
+        <copy file="ant/apple/apple-preinstall.sh.in" tofile="${build.dir}/scripts/preinstall">
+            <filterchain><expandproperties/></filterchain>
+        </copy>
+        <copy file="ant/apple/apple-postinstall.sh.in" tofile="${build.dir}/scripts/postinstall">
+            <filterchain><expandproperties/></filterchain>
+        </copy>
+        <chmod perm="a+x" type="file">
+            <fileset dir="${build.dir}/scripts">
+                <include name="preinstall"/>
+                <include name="postinstall"/>
+            </fileset>
+        </chmod>
+
+        <exec executable="pkgbuild" failonerror="true">
+            <arg value="--identifier"/>
+            <arg value="${apple.bundleid}"/>
+
+            <arg value="--nopayload"/>
+
+            <arg value="--install-location"/>
+            <arg value="/Applications/${project.name}.app"/>
+
+            <arg value="--scripts"/>
+            <arg value="${build.dir}/scripts"/>
+
+            <arg value="--version"/>
+            <arg value="${build.version}"/>
+
+            <arg value="--sign" if:true="${codesign.available}"/>
+            <arg value="${codesign.activeid}" if:true="${codesign.available}"/>
+
+            <arg value="${out.dir}/${project.filename}${build.type}-${build.version}-${apple.target.arch}-unbranded.pkg"/>
+        </exec>
+
+        <!-- Branding for qz only -->
+        <condition property="pkg.background" value="pkg-background.tiff" else="pkg-background-blank.tiff">
+            <equals arg1="${project.filename}" arg2="qz-tray"/>
+        </condition>
+
+        <!-- Copy branded resources to out/resources -->
+        <mkdir dir="${out.dir}/resources"/>
+        <copy file="${basedir}/ant/apple/${pkg.background}" tofile="${out.dir}/resources/background.tiff" failonerror="true"/>
+
+        <!-- Create product definition plist that stipulates supported arch -->
+        <copy file="ant/apple/product-def.plist.in" tofile="${build.dir}/product-def.plist">
+            <filterchain><expandproperties/></filterchain>
+        </copy>
+
+        <!-- Create a distribution.xml file for productbuild -->
+        <exec executable="productbuild" failonerror="true">
+            <arg value="--synthesize"/>
+
+            <arg value="--sign" if:true="${codesign.available}"/>
+            <arg value="${codesign.activeid}" if:true="${codesign.available}"/>
+
+            <arg value="--timestamp"/>
+
+            <arg value="--package"/>
+            <arg value="${out.dir}/${project.filename}${build.type}-${build.version}-${apple.target.arch}-unbranded.pkg"/>
+
+            <arg value="--product"/>
+            <arg value="${build.dir}/product-def.plist"/>
+
+            <arg value="--scripts"/>
+            <arg value="${build.dir}/scripts"/>
+
+            <arg value="${out.dir}/distribution.xml"/>
+        </exec>
+
+        <!-- Inject title, background -->
+        <replace file="${out.dir}/distribution.xml" token="&lt;options customize">
+            <replacevalue><![CDATA[<title>@project.name@ @build.version@</title>
+	<background file="background.tiff" mime-type="image/tiff" alignment="bottomleft" scaling="none"/>
+	<background-darkAqua file="background.tiff" mime-type="image/tiff" alignment="bottomleft" scaling="none"/>
+	<options customize]]></replacevalue>
+            <replacefilter token="@project.name@" value="${project.name}"/>
+            <replacefilter token="@build.version@" value="${build.version}"/>
+        </replace>
+
+        <!-- Create a branded .pkg using productbuild -->
+        <exec executable="productbuild" dir="${out.dir}" failonerror="true">
+            <arg value="--sign" if:true="${codesign.available}"/>
+            <arg value="${codesign.activeid}" if:true="${codesign.available}"/>
+
+            <arg value="--timestamp"/>
+
+            <arg value="--distribution"/>
+            <arg value="${out.dir}/distribution.xml"/>
+
+            <arg value="--resources"/>
+            <arg value="${out.dir}/resources"/>
+
+            <arg value="--product"/>
+            <arg value="${build.dir}/product-def.plist"/>
+
+            <arg value="--package-path"/>
+            <arg value="${project.filename}${build.type}-${build.version}-${apple.target.arch}-unbranded.pkg"/>
+
+            <arg value="${out.dir}/${project.filename}${build.type}-${build.version}-${apple.target.arch}.pkg"/>
+        </exec>
+
+        <!-- Cleanup unbranded version -->
+        <delete file="${out.dir}/${project.filename}${build.type}-${build.version}-${apple.target.arch}-unbranded.pkg"/>
+    </target>
+
+    <target name="build-dmg" depends="get-identity,add-certificates,get-version">
+        <echo level="info">Creating app bundle</echo>
+        <!--
+        #####################################
+        #  Create payload and bundle as dmg #
+        #####################################
+        -->
+
+        <!-- Dmg JSON -->
+        <copy file="ant/apple/appdmg.json.in" tofile="${build.dir}/appdmg.json">
+            <filterchain><expandproperties/></filterchain>
+        </copy>
+
+        <!-- Build app with sandboxing by default-->
+        <property name="build.sandboxed" value="true"/>
+        <antcall target="build-app">
+            <param name="bundle.dir" value="${build.dir}/${project.name}.app"/>
+        </antcall>
+        <!-- Add a break in the logs -->
+        <antcall target="packaging"/>
+
+        <exec executable="appdmg" failonerror="true">
+            <arg value="${build.dir}/appdmg.json"/>
+            <arg value="${out.dir}/${project.filename}${build.type}-${build.version}.dmg"/>
+        </exec>
+    </target>
+
+    <target name="build-app" depends="get-identity">
+        <!-- App Bundle -->
+        <mkdir dir="${bundle.dir}"/>
+
+        <!-- Contents/ -->
+        <copy file="ant/apple/apple-bundle.plist.in" tofile="${bundle.dir}/Contents/Info.plist">
+            <filterchain><expandproperties/></filterchain>
+        </copy>
+
+        <!-- Contents/MacOS/ -->
+        <mkdir dir="${bundle.dir}/Contents/MacOS"/>
+        <copy file="ant/unix/unix-launcher.sh.in" tofile="${bundle.dir}/Contents/MacOS/${project.name}">
+            <filterchain><expandproperties/></filterchain>
+        </copy>
+
+        <!-- Contents/Resources/ -->
+        <copy todir="${bundle.dir}/Contents/Resources">
+            <fileset dir="${dist.dir}">
+                <include name="${project.filename}.jar"/>
+                <include name="LICENSE.txt"/>
+                <include name="override.crt"/>
+            </fileset>
+        </copy>
+        <copy file="assets/branding/apple-icon.icns" tofile="${bundle.dir}/Contents/Resources/${project.filename}.icns"/>
+
+        <copy file="ant/unix/unix-uninstall.sh.in" tofile="${bundle.dir}/Contents/Resources/uninstall">
+            <filterchain><expandproperties/></filterchain>
+        </copy>
+
+        <!-- Copy demo if dist.minimal is false -->
+        <property description="suppress-property-warning" name="dist.minimal" value="false"/>
+        <condition property="dist.full">
+            <isfalse value="${dist.minimal}"/>
+        </condition>
+        <copy todir="${bundle.dir}/Contents/Resources/demo" failonerror="${dist.full}" quiet="${dist.minimal}">
+            <fileset dir="${dist.dir}/demo" includes="**"/>
+        </copy>
+
+        <!-- Provision files -->
+        <delete dir="${bundle.dir}/Contents/Resources/provision" failonerror="false"/>
+        <copy todir="${bundle.dir}/Contents/Resources/provision" failonerror="false">
+            <fileset dir="${provision.dir}" includes="**"/>
+        </copy>
+        <chmod perm="a+x" type="file" verbose="true">
+            <fileset dir="${bundle.dir}/Contents/Resources/" casesensitive="false">
+                <!-- Must iterate on parent directory in case "provision" is missing -->
+                <include name="provision/*"/>
+                <exclude name="provision/*.crt"/>
+                <exclude name="provision/*.txt"/>
+                <exclude name="provision/*.json"/>
+            </fileset>
+        </chmod>
+
+        <!-- Java runtime -->
+        <copy todir="${bundle.dir}/Contents/PlugIns/Java.runtime">
+            <fileset dir="${dist.dir}/Java.runtime" includes="**"/>
+        </copy>
+        <copy todir="${bundle.dir}/Contents/Frameworks">
+            <fileset dir="${dist.dir}/libs" includes="**"/>
+        </copy>
+
+        <copy todir="${bundle.dir}">
+            <fileset dir="${bundle.dir}" includes="**"/>
+        </copy>
+
+        <!-- set payload files executable -->
+        <chmod perm="a+x" type="file">
+            <fileset dir="${bundle.dir}">
+                <include name="**/${project.name}"/>
+                <include name="**/Resources/uninstall"/>
+                <include name="**/bin/*"/>
+                <include name="**/lib/jspawnhelper"/>
+            </fileset>
+        </chmod>
+
+        <copy file="ant/apple/apple-entitlements.plist.in" tofile="${build.dir}/apple-entitlements.plist">
+            <filterchain><expandproperties/></filterchain>
+        </copy>
+
+        <!-- Convert nfc-encoded filenames to nfd-encoded per #1511 -->
+        <exec executable="convmv" failifexecutionfails="false">
+            <arg value="-r"/>
+            <arg value="-f"/>
+            <arg value="utf-8"/>
+            <arg value="-t"/>
+            <arg value="utf-8"/>
+            <arg value="--nfd"/>
+            <arg value="${bundle.dir}"/>
+            <arg value="--notest"/>
+        </exec>
+
+        <!-- use xargs to loop over and codesign all files-->
+        <echo level="info" message="Signing ${bundle.dir} using ${codesign.activeid}"/>
+        <!-- Find -X fails on spaces but doesn't failonerror, this may lead to overlooked errors. -->
+        <!-- Currently the only file that may contains a space is the main executable which we omit from signing anyway. -->
+        <exec executable="bash" failonerror="true" dir="${bundle.dir}">
+            <arg value="-c"/>
+            <arg value="find -X &quot;.&quot; -type f -not -path &quot;*/Contents/MacOS/*&quot; -exec sh -c 'file -I &quot;{}&quot; |grep -m1 &quot;x-mach-binary&quot;|cut -f 1 -d \:' \; |xargs codesign --force -s &quot;${codesign.activeid}&quot; --timestamp --options runtime"/>
+        </exec>
+        <exec executable="codesign" failonerror="true">
+            <arg value="--force"/>
+            <arg value="-s"/>
+            <arg value="${codesign.activeid}"/>
+            <arg value="--timestamp"/>
+            <arg value="--options"/>
+            <arg value="runtime"/>
+            <arg value="--entitlement"/>
+            <arg value="${build.dir}/apple-entitlements.plist"/>
+            <arg value="${bundle.dir}/Contents/PlugIns/Java.runtime/Contents/Home/bin/java"/>
+            <arg value="${bundle.dir}/Contents/PlugIns/Java.runtime/Contents/Home/bin/jcmd"/>
+            <arg value="${bundle.dir}/Contents/PlugIns/Java.runtime"/>
+        </exec>
+        <exec executable="codesign" failonerror="true">
+            <arg value="-s"/>
+            <arg value="${codesign.activeid}"/>
+            <arg value="--timestamp"/>
+            <arg value="--options"/>
+            <arg value="runtime"/>
+            <arg value="--entitlement"/>
+            <arg value="${build.dir}/apple-entitlements.plist"/>
+            <arg value="${bundle.dir}"/>
+        </exec>
+
+        <!-- Verify Java.runtime -->
+        <antcall target="verify-signature">
+            <param name="signed.bundle.name" value="Java.runtime"/>
+            <param name="signed.bundle.dir" value="${bundle.dir}/Contents/PlugIns/Java.runtime"/>
+        </antcall>
+        <!-- Verify QZ Tray.app -->
+        <antcall target="verify-signature" >
+            <param name="signed.bundle.name" value="${project.name}.app"/>
+            <param name="signed.bundle.dir" value="${bundle.dir}"/>
+        </antcall>
+    </target>
+
+    <target name="add-certificates" depends="get-identity">
+        <!-- Remove expired certificates -->
+        <exec executable="security">
+            <arg value="delete-certificate"/>
+            <arg value="-Z"/>
+            <arg value="A69020D49B47383064ADD5779911822850235953"/>
+        </exec>
+        <exec executable="security">
+            <arg value="delete-certificate"/>
+            <arg value="-Z"/>
+            <arg value="6FD7892971854384AF40FAD1E0E6C56A992BC5EE"/>
+        </exec>
+        <exec executable="security">
+            <arg value="delete-certificate"/>
+            <arg value="-Z"/>
+            <arg value="F7F10838412D9187042EE1EB018794094AFA189A"/>
+        </exec>
+
+        <exec executable="security">
+            <arg value="add-certificates"/>
+            <arg value="${basedir}/ant/apple/certs/apple-packager.cer"/>
+            <arg value="${basedir}/ant/apple/certs/apple-intermediate.cer"/>
+            <arg value="${basedir}/ant/apple/certs/apple-codesign.cer"/>
+        </exec>
+    </target>
+
+    <target name="copy-dylibs" if="target.os.mac">
+        <echo level="info">Copying native library files to libs</echo>
+
+        <mkdir dir="${dist.dir}/libs"/>
+        <copy todir="${dist.dir}/libs" flatten="true" verbose="true">
+                <fileset dir="${out.dir}/libs-temp">
+                    <!--x86_64-->
+                    <include name="**/darwin-x86-64/*" if="target.arch.x86_64"/> <!-- jna/hid4java -->
+                    <include name="**/osx-x86_64/*" if="target.arch.x86_64"/> <!-- usb4java -->
+                    <include name="**/osx_64/*" if="target.arch.x86_64"/> <!-- jssc -->
+                    <include name="**/natives/*-x86_64.dylib" if="target.arch.x86_64"/> <!-- flatlaf -->
+                    <!--aarch64-->
+                    <include name="**/darwin-aarch64/*" if="target.arch.aarch64"/> <!-- jna/hid4java -->
+                    <include name="**/osx-aarch64/*" if="target.arch.aarch64"/> <!-- usb4java -->
+                    <include name="**/osx_arm64/*" if="target.arch.aarch64"/> <!-- jssc -->
+                    <include name="**/natives/*-arm64.dylib" if="target.arch.aarch64"/> <!-- flatlaf -->
+                    <!--all-->
+                    <include name="*.dylib"/> <!-- javafx -->
+                </fileset>
+        </copy>
+    </target>
+
+    <target name="get-identity">
+        <property file="ant/apple/apple.properties"/>
+        <!-- Ensure ${apple.packager.signid} is in Keychain -->
+        <exec executable="bash" failonerror="false" resultproperty="codesign.qz">
+            <arg value="-c"/>
+            <arg value="security find-identity -v |grep '(${apple.packager.signid})'"/>
+        </exec>
+        <!-- Fallback to "-" (ad-hoc) if ${apple.packager.signid} isn't found -->
+        <condition property="codesign.activeid" value="${apple.packager.signid}" else="-">
+            <equals arg1="${codesign.qz}" arg2="0"/>
+        </condition>
+
+        <!-- Fallback to "-" (ad-hoc) if ${apple.packager.signid} isn't found -->
+        <condition property="codesign.available">
+            <equals arg1="${codesign.qz}" arg2="0"/>
+        </condition>
+
+        <!-- Property to show warning later -->
+        <condition property="codesign.selfsign">
+            <equals arg1="${codesign.activeid}" arg2="-"/>
+        </condition>
+    </target>
+
+    <target name="verify-signature">
+        <echo level="info">Verifying ${signed.bundle.name} Signature</echo>
+        <echo level="info">Location: ${signed.bundle.dir}</echo>
+
+        <exec executable="codesign" failifexecutionfails="false" resultproperty="signing.status">
+            <arg value="-v"/>
+            <arg value="--strict"/>
+            <arg value="${signed.bundle.dir}"/>
+        </exec>
+        <condition property="message.severity" value="info" else="warn">
+            <equals arg1="${signing.status}" arg2="0"/>
+        </condition>
+        <condition property="message.description"
+                   value="Signing passed: Successfully signed"
+                   else="Signing failed:: Signing failed (will prevent app from launching)">
+            <equals arg1="${signing.status}" arg2="0"/>
+        </condition>
+        <echo level="${message.severity}">${message.description}</echo>
+    </target>
+
+    <!-- Stub title/separator workaround for build-pkg/build-dmg -->
+    <target name="packaging"/>
+</project>

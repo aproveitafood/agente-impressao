@@ -1,0 +1,11 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="App" type="Application" factoryName="Application">
+    <option name="MAIN_CLASS_NAME" value="qz.App" />
+    <module name="tray" />
+    <option name="PROGRAM_PARAMETERS" value="--steal" />
+    <option name="VM_PARAMETERS" value="-Dapple.awt.enableTemplateImages=true" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

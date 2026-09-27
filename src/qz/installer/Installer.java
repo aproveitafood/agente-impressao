@@ -1,0 +1,482 @@
+/**
+ * @author Tres Finocchiaro
+ *
+ * Copyright (C) 2019 Tres Finocchiaro, QZ Industries, LLC
+ *
+ * LGPL 2.1 This is free software.  This software and source code are released under
+ * the "LGPL 2.1 License".  A copy of this license should be distributed with
+ * this software. http://www.gnu.org/licenses/lgpl-2.1.html
+ */
+
+package qz.installer;
+
+import org.apache.commons.io.FileUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import qz.auth.Certificate;
+import qz.build.provision.params.Phase;
+import qz.installer.apps.firefox.FirefoxCertificateInstaller;
+import qz.installer.apps.locator.ResolvedApp;
+import qz.installer.apps.locator.AppLocator;
+import qz.installer.certificate.*;
+import qz.installer.provision.ProvisionInstaller;
+import qz.utils.ArgParser;
+import qz.utils.FileUtilities;
+import qz.utils.SystemUtilities;
+import qz.ws.WebsocketPorts;
+
+import java.io.*;
+import java.nio.file.*;
+import java.security.cert.X509Certificate;
+import java.util.*;
+
+import static qz.common.Constants.*;
+import static qz.installer.apps.locator.AppFamily.*;
+import static qz.installer.certificate.KeyPairWrapper.Type.CA;
+import static qz.utils.FileUtilities.*;
+
+/**
+ * Cross-platform wrapper for install steps
+ * - Used by CommandParser via command line
+ * - Used by PrintSocketServer at startup to ensure SSL is functioning
+ */
+public abstract class Installer {
+    protected static final Logger log = LogManager.getLogger(Installer.class);
+
+    // Silence prompts within our control
+    public static boolean IS_SILENT =  "1".equals(System.getenv(DATA_DIR + "_silent"));
+    public static String JRE_LOCATION = SystemUtilities.isMac() ? "Contents/PlugIns/Java.runtime/Contents/Home" : "runtime";
+
+    private final PrivilegeLevel scope;
+    private final boolean ownerOnly;
+    WebsocketPorts websocketPorts;
+
+    public enum PrivilegeLevel {
+        USER,
+        SYSTEM
+    }
+
+    public abstract Installer removeLegacyStartup();
+    public abstract Installer addAppLauncher();
+    public abstract Installer addStartupEntry();
+    @SuppressWarnings("UnusedReturnValue")
+    public abstract Installer addSystemSettings();
+    public abstract Installer removeSystemSettings();
+    public abstract void spawn(List<String> args) throws Exception;
+
+    public abstract void setDestination(String destination);
+    public abstract String getDestination();
+
+    private static Installer instance;
+
+    public Installer() {
+        scope = SystemUtilities.isAdmin() ? PrivilegeLevel.SYSTEM : PrivilegeLevel.USER;
+        ownerOnly = isOwnerOnly(scope);
+    }
+
+    public static Installer getInstance() {
+        if(instance == null) {
+            switch(SystemUtilities.getOs()) {
+                case WINDOWS:
+                    instance = new WindowsInstaller();
+                    break;
+                case MAC:
+                    instance = new MacInstaller();
+                    break;
+                default:
+                    instance = new LinuxInstaller();
+            }
+        }
+        return instance;
+    }
+
+    public PrivilegeLevel getScope() {
+        return scope;
+    }
+
+    public static void install(String destination, boolean silent) throws Exception {
+        IS_SILENT |= silent; // preserve environmental variable if possible
+        getInstance();
+        if (destination != null) {
+            instance.setDestination(destination);
+        }
+        install();
+    }
+
+    public static boolean preinstall() {
+        getInstance();
+        log.info("Fixing runtime permissions...");
+        instance.setJrePermissions(SystemUtilities.getAppPath().toString());
+        log.info("Stopping running instances...");
+        return TaskKiller.killAll();
+    }
+
+    public static void install() throws Exception {
+        getInstance();
+        log.info("Installing to {}", instance.getDestination());
+        instance.removeLibs()
+                .removeProvisioning()
+                .deployApp()
+                .removeLegacyStartup()
+                .removeLegacyFiles()
+                .addSharedDirectory()
+                .addAppLauncher()
+                .addStartupEntry()
+                .invokeProvisioning(Phase.INSTALL)
+                .addSystemSettings();
+    }
+
+    public static void uninstall() {
+        log.info("Stopping running instances...");
+        TaskKiller.killAll();
+        getInstance();
+        log.info("Uninstalling from {}", instance.getDestination());
+        instance.removeSharedDirectory()
+                .removeSystemSettings()
+                .removeCerts()
+                .invokeProvisioning(Phase.UNINSTALL);
+    }
+
+    public Installer deployApp() throws IOException {
+        Path src = SystemUtilities.getAppPath();
+        Path dest = Paths.get(getDestination());
+
+        if(!Files.exists(dest)) {
+            Files.createDirectories(dest);
+        }
+
+        // Delete the JDK blindly
+        FileUtilities.deleteDirectory(dest.resolve(JRE_LOCATION));
+        // Note: preserveFileDate=false per https://github.com/qzind/tray/issues/1011
+        FileUtils.copyDirectory(src.toFile(), dest.toFile(), false);
+        FileUtilities.setPermissionsRecursively(dest, false);
+        // Fix permissions for provisioned files
+        FileUtilities.setExecutableRecursively(SystemUtilities.isMac() ?
+                                                       dest.resolve("Contents/Resources").resolve(PROVISION_DIR) :
+                                                       dest.resolve(PROVISION_DIR), ownerOnly);
+        if(!SystemUtilities.isWindows()) {
+            setExecutableRelative(SystemUtilities.isMac() ? "Contents/Resources/uninstall" : "uninstall");
+            setExecutableRelative(SystemUtilities.isMac() ? "Contents/MacOS/" + ABOUT_TITLE : PROPS_FILE);
+            return setJrePermissions(getDestination());
+        }
+        return this;
+    }
+
+    private Installer setJrePermissions(String dest) {
+        File jreLocation = new File(dest, JRE_LOCATION);
+        File jreBin = new File(jreLocation, "bin");
+        File jreLib = new File(jreLocation, "lib");
+
+        // Set jre/bin/java and friends executable
+        File[] files = jreBin.listFiles(pathname -> !pathname.isDirectory());
+        if(files != null) {
+            for(File file : files) {
+                if(!file.setExecutable(true, ownerOnly)) {
+                    log.error("Unable to set file executable '{}'", file);
+                }
+            }
+        }
+
+        setExecutableRelative(jreLib, String.format("jspawnhelper%s", SystemUtilities.isWindows() ? ".exe" : ""));
+        return this;
+    }
+
+    /**
+     * Helper to avoid IDE warnings about unused return value.
+     */
+    private void setExecutable(File file) {
+        if(!file.setExecutable(true, ownerOnly)) {
+            log.warn("Unable to set '{}' executable, this will cause problems", file);
+        }
+    }
+
+    private void setExecutableRelative(File parent, String relativePath) {
+        setExecutable(new File(parent, relativePath));
+    }
+
+    private void setExecutableRelative(String relativePath) {
+        setExecutable(new File(getDestination(), relativePath));
+    }
+
+    /**
+     * Explicitly purge libs to notify system cache per <a href="https://github.com/qzind/tray/issues/662">#662</a>
+     */
+    public Installer removeLibs() {
+        String[] dirs = { "libs" };
+        for (String dir : dirs) {
+            try {
+                FileUtilities.deleteDirectory(instance.getDestination(), dir);
+            } catch(IOException ignore) {}
+        }
+        return this;
+    }
+
+    @SuppressWarnings("UnusedReturnValue")
+    public Installer cleanupLegacyLogs(int rolloverCount) {
+        // Convert old < 2.2.3 log file format
+        Path logLocation = USER_DIR;
+        int oldIndex = 0;
+        int newIndex = 0;
+        File oldFile;
+        do {
+            // Old: debug.log.1
+            oldFile = logLocation.resolve("debug.log." + ++oldIndex).toFile();
+            if(oldFile.exists()) {
+                // New: debug.1.log
+                File newFile;
+                do {
+                    newFile = logLocation.resolve("debug." + ++newIndex + ".log").toFile();
+                } while(newFile.exists());
+
+                if(oldFile.renameTo(newFile)) {
+                    log.info("Migrated log file '{}' to new location '{}'", oldFile, newFile);
+                } else {
+                    log.error("An error occurred migrating log file '{}' to new location '{}'", oldFile, newFile);
+                }
+            }
+        } while(oldFile.exists() || oldIndex <= rolloverCount);
+
+        return this;
+    }
+
+    public Installer removeLegacyFiles() {
+        ArrayList<String> dirs = new ArrayList<>();
+        ArrayList<String> files = new ArrayList<>();
+        HashMap<String, String> move = new HashMap<>();
+
+        // QZ Tray 2.0 files
+        dirs.add("demo/js/3rdparty");
+        dirs.add("utils");
+        dirs.add("auth");
+        files.add("demo/js/qz-websocket.js");
+        files.add("windows-icon.ico");
+
+        // QZ Tray 2.2.3-SNAPSHOT accidentally wrote certs in the wrong place
+        dirs.add("ssl");
+
+        // QZ Tray 2.1 files
+        if(SystemUtilities.isMac()) {
+            // Moved to macOS Application Bundle standard https://developer.apple.com/go/?id=bundle-structure
+            dirs.add("demo");
+            dirs.add("libs");
+            files.add(PROPS_FILE + ".jar");
+            files.add("LICENSE.txt");
+            files.add("uninstall");
+            move.put(PROPS_FILE + ".properties", "Contents/Resources/" + PROPS_FILE + ".properties");
+        }
+
+        dirs.forEach(dir -> {
+            try {
+                FileUtilities.deleteDirectory(instance.getDestination(), dir);
+            } catch(IOException ignore) {}
+        });
+
+        files.forEach(file -> {
+            if(!new File(instance.getDestination() + File.separator + file).delete()) {
+                log.warn("Unable to delete legacy file '{}'", file);
+            }
+        });
+
+        move.forEach((src, dest) -> {
+            try {
+                FileUtils.moveFile(new File(instance.getDestination() + File.separator + src),
+                                   new File(instance.getDestination() + File.separator + dest));
+            } catch(IOException ignore) {}
+        });
+        return this;
+    }
+
+    public Installer addSharedDirectory() {
+        try {
+            Files.createDirectories(SHARED_DIR);
+            FileUtilities.setPermissionsRecursively(SHARED_DIR, true);
+            Path ssl = Paths.get(SHARED_DIR.toString(), "ssl");
+            Files.createDirectories(ssl);
+            FileUtilities.setPermissionsRecursively(ssl, true);
+
+            log.info("Created shared directory: {}", SHARED_DIR);
+        } catch(IOException e) {
+            log.warn("Could not create shared directory: {}", SHARED_DIR);
+        }
+        return this;
+    }
+
+    public Installer removeSharedDirectory() {
+        try {
+            FileUtilities.deleteDirectory(SHARED_DIR);
+            log.info("Deleted shared directory: {}", SHARED_DIR);
+        } catch(IOException e) {
+            log.warn("Could not delete shared directory: {}", SHARED_DIR);
+        }
+        return this;
+    }
+
+    /**
+     * Checks, and if needed generates an SSL for the system
+     */
+    public CertificateManager certGen(boolean forceNew, String... hostNames) throws Exception {
+        CertificateManager certificateManager = new CertificateManager(forceNew, hostNames);
+        boolean needsInstall = certificateManager.needsInstall();
+        try {
+            // Check that the CA cert is installed
+            X509Certificate caCert = certificateManager.getKeyPair(CA).getCert();
+            NativeCertificateInstaller installer = NativeCertificateInstaller.getInstance(scope);
+
+            if (forceNew || needsInstall) {
+                // Remove installed certs per request (usually the desktop installer, or failure to write properties)
+                // Skip if running from IDE, this may accidentally remove sandboxed certs
+                if(SystemUtilities.isJar()) {
+                    List<String> matchingCerts = installer.find();
+                    installer.remove(matchingCerts);
+                }
+                installer.install(caCert);
+
+                // Install Firefox certificate
+                new FirefoxCertificateInstaller(scope, caCert).install();
+
+                // Find running Firefox instances
+                HashSet<ResolvedApp> uniqueApps = new HashSet<>();
+                HashMap<String,ResolvedApp> foundProcesses = AppLocator.getInstance().getRunningApps(AppLocator.getInstance().locate(FIREFOX), null);
+                // Dedupe
+                foundProcesses.forEach((key, value) -> uniqueApps.add(value));
+                // Issue restart warnings
+                uniqueApps.forEach((ResolvedApp::issueRestartWarning));
+            }
+        }
+        catch(Exception e) {
+            log.error("Something went wrong obtaining the certificate.  HTTPS will fail.", e);
+        }
+
+        // Add provisioning steps that come after certgen
+        if(SystemUtilities.isAdmin()) {
+            invokeProvisioning(Phase.CERTGEN);
+        }
+
+        return certificateManager;
+    }
+
+    /**
+     * Remove matching certs from user|system, then Firefox
+     */
+    public Installer removeCerts() {
+        // System certs
+        NativeCertificateInstaller instance = NativeCertificateInstaller.getInstance(scope);
+        instance.remove(instance.find());
+
+        // Uninstall Firefox certificate
+        new FirefoxCertificateInstaller(scope, null).uninstall();
+
+        return this;
+    }
+
+    /**
+     * Add user-specific settings
+     * Note: See override usage for platform-specific tasks
+     */
+    public Installer addUserSettings() {
+        // Check for whitelisted certificates in <install>/whitelist/
+        Path jarParent = SystemUtilities.getJarParentPath();
+        if(jarParent == null) {
+            log.error("Could not calculate jar parent path, can't add user settings");
+            return this;
+        }
+        Path whiteList = jarParent.resolve(WHITELIST_CERT_DIR);
+        if(Files.exists(whiteList) && Files.isDirectory(whiteList)) {
+            File[] whiteListFiles = whiteList.toFile().listFiles();
+            if(whiteListFiles == null) {
+                return this; // no files
+            }
+            for(File file : whiteListFiles) {
+                try {
+                    if(FileUtilities.addToCertList(ALLOW_FILE, file) != ArgParser.ExitStatus.SUCCESS) {
+                        throw new Exception("Certificate was not added");
+                    }
+                } catch(Exception e) {
+                    log.warn("Could not add {} to {}", file, ALLOW_FILE, e);
+                }
+            }
+        }
+        return instance;
+    }
+
+    public Installer invokeProvisioning(Phase phase) {
+        try {
+            Path provisionPath = SystemUtilities.isMac() ?
+                    Paths.get(getDestination()).resolve("Contents/Resources").resolve(PROVISION_DIR) :
+                    Paths.get(getDestination()).resolve(PROVISION_DIR);
+            ProvisionInstaller provisionInstaller = new ProvisionInstaller(provisionPath);
+            provisionInstaller.invoke(phase);
+
+            // Special case for custom websocket ports
+            if(phase == Phase.INSTALL) {
+                    websocketPorts = WebsocketPorts.parseFromSteps(provisionInstaller.getSteps());
+            }
+        } catch(Exception e) {
+            log.warn("An error occurred invoking provision \"phase\": \"{}\"", phase, e);
+        }
+        return this;
+    }
+
+    public Installer removeProvisioning() {
+        try {
+            Path provisionPath = SystemUtilities.isMac() ?
+                    Paths.get(getDestination()).resolve("Contents/Resources").resolve(PROVISION_DIR) :
+                    Paths.get(getDestination()).resolve(PROVISION_DIR);
+            FileUtilities.deleteDirectory(provisionPath);
+        } catch(Exception e) {
+            log.warn("An error occurred removing provision directory",  e);
+        }
+        return this;
+    }
+
+    @SuppressWarnings("UnusedReturnValue")
+    public static Properties persistProperties(File oldFile, Properties newProps) {
+        if(oldFile.exists()) {
+            Properties oldProps = new Properties();
+            try(Reader reader = new FileReader(oldFile)) {
+                oldProps.load(reader);
+                for(String key : PERSIST_PROPS) {
+                    if (oldProps.containsKey(key)) {
+                        String value = oldProps.getProperty(key);
+                        log.info("Preserving {}={} for install", key, value);
+                        newProps.put(key, value);
+                    }
+                }
+            } catch(IOException e) {
+                log.warn("Warning, an error occurred reading the old properties file {}", oldFile, e);
+            }
+        }
+        return newProps;
+    }
+
+    public void spawn(ResolvedApp app) throws Exception {
+        spawn(app.getExeCommand());
+    }
+
+    public void spawn(String ... args) throws Exception {
+        spawn(new ArrayList<>(Arrays.asList(args)));
+    }
+
+    void startProcess(List<String> argList) throws Exception {
+        startProcess(argList, null);
+    }
+
+    void startProcess(List<String> argList, HashMap<String,String> envp) throws Exception {
+        ProcessBuilder pb = new ProcessBuilder(argList);
+        if(envp != null) pb.environment().putAll(envp);
+
+        pb.redirectOutput(ProcessBuilder.Redirect.DISCARD);
+        pb.redirectError(ProcessBuilder.Redirect.DISCARD);
+        pb.redirectInput(ProcessBuilder.Redirect.PIPE);
+        pb.start();
+    }
+
+    /**
+     * Helper for file system permissions (such as <code>setExecutable(...)</code> or <code>setReadable(...)</code>).
+     * Returns <code>false</code> for SYSTEM-scoped installs since these files often need to be world read/execute
+     * but returns <code>true</code> for USER-scoped installs to avoid granting permission to strangers
+     */
+    public static boolean isOwnerOnly(PrivilegeLevel scope) {
+        return scope != PrivilegeLevel.SYSTEM;
+    }
+}

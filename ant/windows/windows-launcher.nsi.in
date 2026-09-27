@@ -1,0 +1,97 @@
+!include x64.nsh
+!include LogicLib.nsh
+
+!ifdef NSIS_UNICODE
+	!addplugindir "${plugins.path}/Release_Unicode"
+!else
+	!addplugindir "${plugins.path}/Release_ANSI"
+!endif
+!addincludedir "${basedir}/ant/windows/nsis/Include"
+!include StdUtils.nsh
+!include StrLoc.nsh
+!include FindJava.nsh
+
+!insertmacro GetParameters
+
+; Run this exe as non-admin
+RequestExecutionLevel user
+
+; Application information
+!define /date YEAR %Y
+VIProductVersion "${build.nsis.version}"
+VIAddVersionKey "FileDescription" "${project.name}"
+VIAddVersionKey "ProductName" "${project.name}"
+VIAddVersionKey "ProductVersion" "${build.version}"
+VIAddVersionKey "CompanyName" "${vendor.company}"
+VIAddVersionKey "LegalCopyright" "Copyright ${U+A9} ${YEAR}"
+VIAddVersionKey "LegalTrademarks" "${vendor.company}"
+VIAddVersionKey "OriginalFilename" "${project.filename}.exe"
+
+Name "${project.name}"
+Caption "${project.name}"
+Icon "${basedir}/assets/branding/windows-icon.ico"
+OutFile "${nsis.outfile}"
+ 
+SilentInstall silent
+AutoCloseWindow true
+ShowInstDetails nevershow
+
+; Full path to jar
+!define JAR "$EXEDIR/${project.filename}.jar"
+
+Section
+    ${If} ${RunningX64}
+        ${DisableX64FSRedirection}
+    ${EndIf}
+    SetOutPath $EXEDIR
+
+    ; Get params to pass to jar
+    Var /GLOBAL params
+    ${GetParameters} $params
+
+    ; Sets the $java variable
+    Push "$EXEDIR"
+    Call FindJava
+
+    Var /GLOBAL opts
+    StrCpy $opts "${launch.opts} ${windows.launch.opts}"
+
+    ; Check for user overridable launch options
+    ClearErrors
+    ReadEnvStr $R0 ${launch.overrides}
+    IfErrors +2 0
+    StrCpy $opts "$opts $R0"
+
+    Var /GLOBAL command
+    StrCpy $command '"$javaw" $opts -jar "${JAR}" $params'
+
+    ; If ends in "-console.exe", use "cmd /s /k" to launch
+    ${StrLoc} $R1 "${nsis.outfile}" "-console.exe" "<"
+    ${If} $R1 == "0"
+        ExpandEnvStrings $R2 %COMSPEC%
+        StrCpy $command '"$R2" /s /k "$command"'
+    ${EndIf}
+
+    ; Allow return of exit code
+    ${StrLoc} $R2 $params "--wait" "<"
+    ${If} $R2 != ""
+        ; Switch from /k to /c to capture exit code from -console.exe
+        ${StrRep} $command "$command" " /k " " /c "
+        ExecWait $command $R3
+        ; Set error-level
+        SetErrorLevel $R3
+    ${Else}
+        Exec $command
+    ${EndIf}
+
+    ${If} ${RunningX64}
+        ${EnableX64FSRedirection}
+    ${EndIf}
+SectionEnd
+
+Function .onInit
+    ${If} ${RunningX64}
+        SetRegView 64
+        ${DisableX64FSRedirection}
+    ${EndIf}
+FunctionEnd

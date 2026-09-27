@@ -1,0 +1,40 @@
+#!/bin/bash
+
+# Halt on first error
+set -e
+
+if [ "$(id -u)" != "0" ]; then
+    if [ "$1" != "--user" ]; then
+      echo "This script should be run with root (sudo) privileges.  Call with '--user' to ignore." 1>&2
+      exit 1
+    fi
+fi
+
+# Get working directory
+DIR=$(cd "$(dirname "$0")" && pwd)
+pushd "$DIR"
+
+echo "Running uninstall tasks..."
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # Uninstall script is in "QZ Tray.app/Contents/Resources/uninstall"
+    # Calculate the path to "QZ Tray.app"
+    APP_DIR=$(cd "$(dirname "$0")/../.." && pwd)
+
+    if [[ "$APP_DIR" != *".app" ]]; then
+      echo -e "\nMalformed app directory. Uninstallation of ${project.name} failed.\n"
+      exit 1
+    fi
+    # Launcher script is in "QZ Tray.app/Contents/MacOS"
+    "$APP_DIR/Contents/MacOS/${project.name}" uninstall
+else
+    # Uninstall script is in root of app (e.g. "/opt/qz-tray")
+    APP_DIR="$DIR"
+    # Launcher script is adjacent to uninstall script
+    "$APP_DIR/${project.filename}" uninstall
+fi
+
+echo "Deleting files..."
+rm -rf "$APP_DIR"
+echo -e "\nUninstall of ${project.name} complete.\n"
+
+popd &>/dev/null

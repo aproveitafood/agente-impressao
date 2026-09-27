@@ -1,0 +1,741 @@
+/**
+ * @author Tres Finocchiaro
+ *
+ * Copyright (C) 2016 Tres Finocchiaro, QZ Industries, LLC
+ *
+ * LGPL 2.1 This is free software.  This software and source code are released under
+ * the "LGPL 2.1 License".  A copy of this license should be distributed with
+ * this software. http://www.gnu.org/licenses/lgpl-2.1.html
+ */
+
+package qz.utils;
+
+import com.formdev.flatlaf.FlatDarculaLaf;
+import com.formdev.flatlaf.FlatIntelliJLaf;
+import com.github.zafarkhaja.semver.ParseException;
+import com.github.zafarkhaja.semver.Version;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.ssl.Base64;
+import org.joor.Reflect;
+import org.joor.ReflectException;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import qz.App;
+import qz.build.provision.params.Arch;
+import qz.build.provision.params.Os;
+import qz.common.Constants;
+import qz.installer.Installer;
+import qz.utils.linux.LinuxUtilities;
+
+import javax.swing.*;
+import java.awt.*;
+import java.awt.geom.Area;
+import java.io.File;
+import java.io.UnsupportedEncodingException;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.URLDecoder;
+import java.nio.Buffer;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
+
+/**
+ * Utility class for OS detection functions.
+ *
+ * @author Tres Finocchiaro
+ */
+public class SystemUtilities {
+    static final String OS_NAME = System.getProperty("os.name");
+    static final String OS_ARCH = System.getProperty("os.arch");
+    private static final Os OS_TYPE = Os.bestMatch(OS_NAME);
+    private static final Arch JRE_ARCH = Arch.bestMatch(OS_ARCH);
+    private static final Logger log = LogManager.getLogger(SystemUtilities.class);
+
+    private static double windowScaleFactor = -1;
+    private static final Locale defaultLocale = Locale.getDefault();
+
+    static {
+        if(!isWindows() && !isMac()) {
+            // Force hid4java to use libusb: https://github.com/qzind/tray/issues/853
+            try {
+                Reflect.on("org.hid4java.jna.HidApi").set("useLibUsbVariant", true);
+            } catch(ReflectException ignore) {}
+        }
+    }
+
+    private static Boolean darkDesktop;
+    private static Boolean darkTaskbar;
+    @Deprecated
+    private static Boolean hasMonocle;
+    private static String classProtocol;
+    private static Version osVersion;
+    private static String osName;
+    private static String osDisplayVersion;
+    private static Path jarPath;
+    private static Integer pid;
+
+    public static Os getOs() {
+        return OS_TYPE;
+    }
+
+    public static Arch getArch() {
+        return JRE_ARCH;
+    }
+
+    /**
+     * Call to workaround Locale-specific bugs (See issue #680)
+     * Please call <code>restoreLocale()</code> as soon as possible
+     */
+    public static synchronized void swapLocale() {
+        Locale.setDefault(Locale.ENGLISH);
+    }
+
+    public static synchronized void restoreLocale() {
+        Locale.setDefault(defaultLocale);
+    }
+
+    public static String toISO(Date d) {
+        DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm'Z'", Locale.ENGLISH);
+        TimeZone tz = TimeZone.getTimeZone("UTC");
+        df.setTimeZone(tz);
+        return df.format(d);
+    }
+
+    public static String timeStamp() {
+        return toISO(new Date());
+    }
+
+    /**
+     * The semantic version of the OS (e.g. "1.2.3")
+     */
+    public static Version getOsVersion() {
+        if (osVersion == null) {
+            try {
+                switch(OS_TYPE) {
+                    case WINDOWS:
+                        // Windows is missing patch release, read it from registry
+                        osVersion = WindowsUtilities.getOsVersion();
+                        break;
+                    default:
+                        String version = System.getProperty("os.version", "0.0.0");
+                        while(version.split("\\.").length < 3) {
+                            version += ".0";
+                        }
+                        osVersion = Version.valueOf(version);
+                }
+            } catch(ParseException | IllegalArgumentException e) {
+                log.warn("Unable to parse OS version as a semantic version", e);
+                osVersion = Version.forIntegers(0, 0, 0);
+            }
+        }
+        return osVersion;
+    }
+
+    /**
+     * Manipulate a Version into another format (x.x.x.0), e.g. 2.2.6-SNAPSHOT --> 2.2.6.0
+     * Note, this is rigid and can't dynamically output "-" or "+" based on prerelease status
+     */
+    public static String formatVersion(Version version, String format) {
+        String output = format;
+        output = output.replaceFirst("x", String.valueOf(version.majorVersion()));
+        output = output.replaceFirst("x", String.valueOf(version.minorVersion()));
+        output = output.replaceFirst("x", String.valueOf(version.patchVersion()));
+        output = output.replaceFirst("x", version.buildMetadata().orElse(version.preReleaseVersion().orElse("0")));
+        return output;
+    }
+
+    /**
+     * The human-readable display version of the OS (e.g. "22.04.1 LTS (Jammy Jellyfish)")
+     */
+    public static String getOsDisplayVersion() {
+        if (osDisplayVersion == null) {
+            osDisplayVersion = switch(OS_TYPE) {
+                case WINDOWS -> WindowsUtilities.getOsDisplayVersion();
+                case MAC -> MacUtilities.getOsDisplayVersion();
+                default -> LinuxUtilities.getOsDisplayVersion();
+            };
+        }
+        return osDisplayVersion;
+    }
+
+    /**
+     * The human-readable display name of the OS (e.g. "Windows 10" or "Ubuntu")
+     */
+    public static String getOsDisplayName() {
+        if(osName == null) {
+            osName = switch(OS_TYPE) {
+                case WINDOWS, MAC -> System.getProperty("os.name", "Unknown");
+                default -> LinuxUtilities.getDisplayName();
+            };
+        }
+        return osName;
+    }
+
+    public static boolean isAdmin() {
+        switch(OS_TYPE) {
+            case WINDOWS:
+                return ShellUtilities.execute("net", "session");
+            default:
+                return whoami().equals("root");
+        }
+    }
+
+    public static String whoami() {
+        String whoami = System.getProperty("user.name");
+        if(whoami == null || whoami.trim().isEmpty()) {
+            // Fallback on Command line
+            whoami = ShellUtilities.executeRaw("whoami").trim();
+        }
+        return whoami;
+    }
+
+    public static int getProcessId() {
+        if(pid == null) {
+            pid = (int)ProcessHandle.current().pid();
+        }
+        return pid;
+    }
+
+    /**
+     * Determines the currently running Jar's absolute path on the local filesystem
+     * todo: make this return a sane directory for running via ide
+     *
+     * @return A String value representing the absolute path to the currently running
+     * jar
+     */
+    public static Path getJarPath() {
+        // jarPath won't change, send the cached value if we have it
+        if (jarPath != null) return jarPath;
+        try {
+            String url = URLDecoder.decode(SystemUtilities.class.getProtectionDomain().getCodeSource().getLocation().getPath(), "UTF-8");
+            jarPath = new File(url).toPath();
+            if (jarPath == null) return null;
+            jarPath = jarPath.toAbsolutePath();
+        } catch(InvalidPathException | UnsupportedEncodingException ex) {
+            log.error("Unable to determine Jar path", ex);
+        }
+        return jarPath;
+    }
+
+    /**
+     * Returns the folder containing the running jar
+     * or null if no .jar is found (such as running from IDE)
+     */
+    public static Path getJarParentPath(){
+        Path path = getJarPath();
+        if (path == null || path.getParent() == null) return null;
+        return path.getParent();
+    }
+
+    /**
+     * Returns the jar's parent path, or a fallback if we're not a jar
+     */
+    public static Path getJarParentPath(String relativeFallback) {
+        return getJarParentPath().resolve(SystemUtilities.isJar() ? "": relativeFallback).normalize();
+    }
+
+    /**
+     * Returns the app's path, calculated from the jar location
+     * or working directory if none can be found
+     */
+    public static Path getAppPath() {
+        Path appPath = getJarParentPath();
+        if(appPath == null) {
+            // We should never get here
+            appPath = Paths.get(System.getProperty("user.dir"));
+        }
+
+        // Assume we're installed and running from /Applications/QZ Tray.app/Contents/Resources/qz-tray.jar
+        if(appPath.endsWith("Resources")) {
+            return appPath.getParent().getParent();
+        }
+        // For all other use-cases, qz-tray.jar is installed in the root of the application
+        return appPath;
+    }
+
+    /**
+     * Determine if the current Operating System is Windows
+     *
+     * @return {@code true} if Windows, {@code false} otherwise
+     */
+    public static boolean isWindows() {
+        return OS_TYPE == Os.WINDOWS;
+    }
+
+    /**
+     * Determine if the current Operating System is Mac OS
+     *
+     * @return {@code true} if Mac OS, {@code false} otherwise
+     */
+    public static boolean isMac() {
+        return OS_TYPE == Os.MAC;
+    }
+
+    /**
+     * Determine if the current Operating System is Linux
+     *
+     * @return {@code true} if Linux, {@code false} otherwise
+     */
+    public static boolean isLinux() {
+        return OS_TYPE == Os.LINUX;
+    }
+
+    /**
+     * Determine if the current Operating System is Unix
+     *
+     * @return {@code true} if Unix, {@code false} otherwise
+     */
+    public static boolean isUnix() {
+        if(OS_NAME != null) {
+            String osLower = OS_NAME.toLowerCase(Locale.ENGLISH);
+            return OS_TYPE == Os.MAC || OS_TYPE == Os.SOLARIS || OS_TYPE == Os.LINUX ||
+                    osLower.contains("nix") || osLower.indexOf("aix") > 0;
+        }
+        return false;
+    }
+
+    /**
+     * Determine if the current Operating System is Solaris
+     *
+     * @return {@code true} if Solaris, {@code false} otherwise
+     */
+    public static boolean isSolaris() {
+        return OS_TYPE == Os.SOLARIS;
+    }
+
+    public static boolean isDarkTaskbar() {
+        return isDarkTaskbar(false);
+    }
+
+    /**
+     * Handle nuances of a taskbar that's themed differently than the rest of the desktop
+     * which is mostly a Windows-ism.  macOS and Linux both provide ways to use template
+     * icons/mask icons for the taskbar.
+     */
+    public static boolean isDarkTaskbar(boolean recheck) {
+        if(darkTaskbar == null || recheck) {
+            darkTaskbar = switch(OS_TYPE) {
+                case WINDOWS -> WindowsUtilities.isDarkTaskbar();
+                case MAC -> false; // ignore, we'll use template icons
+                default ->  isDarkDesktop(); // re-use desktop value TODO: revisit after #1456
+            };
+        }
+        return darkTaskbar;
+    }
+
+    public static boolean isDarkDesktop() {
+        return isDarkDesktop(false);
+    }
+
+    public static boolean isDarkDesktop(boolean recheck) {
+        if (darkDesktop == null || recheck) {
+            darkDesktop = switch(OS_TYPE) {
+                case MAC -> MacUtilities.isDarkDesktop();
+                case WINDOWS -> WindowsUtilities.isDarkDesktop();
+                default ->  LinuxUtilities.isDarkDesktop();
+            };
+        }
+        return darkDesktop;
+    }
+
+    public static void adjustThemeColors() {
+        Constants.WARNING_COLOR = isDarkDesktop() ? Constants.WARNING_COLOR_DARK : Constants.WARNING_COLOR_LITE;
+        Constants.TRUSTED_COLOR = isDarkDesktop() ? Constants.TRUSTED_COLOR_DARK : Constants.TRUSTED_COLOR_LITE;
+    }
+
+    public static boolean prefersMaskTrayIcon() {
+        return Constants.MASK_TRAY_SUPPORTED && switch(OS_TYPE) {
+            case MAC -> true;
+            case WINDOWS -> SystemUtilities.getOsVersion().majorVersion() >= 10;
+            default -> false;
+        };
+    }
+
+    private static String calculateLaf() {
+        // Use Darcula l&F for all OSs
+        if(isDarkDesktop()) {
+            return FlatDarculaLaf.class.getCanonicalName();
+        }
+        // Use system l&f for everything except linux/unix
+        return switch(OS_TYPE) {
+            case WINDOWS, MAC -> UIManager.getSystemLookAndFeelClassName();
+            default -> FlatIntelliJLaf.class.getCanonicalName();
+        };
+    }
+
+    public static boolean setSystemLookAndFeel() {
+        if(App.isHeadless()) {
+            return false;
+        }
+        try {
+            UIManager.getDefaults().put("Button.showMnemonics", Boolean.TRUE);
+            UIManager.setLookAndFeel(calculateLaf());
+            adjustThemeColors();
+            return true;
+        } catch (Throwable t) {
+            log.warn("Error getting the default look and feel");
+        }
+        return false;
+    }
+
+    /**
+     * Attempts to center a dialog provided a center point from a web browser at 96-dpi
+     * Useful for tracking a browser window on multiple-monitor setups
+     * @param dialog A dialog whom's width and height are used for calculating center-fit position
+     * @param position The center point of a screen as calculated from a web browser at 96-dpi
+     */
+    public static void centerDialog(Dialog dialog, Point position) {
+        // Assume 0,0 are bad coordinates
+        if (position == null || (position.getX() == 0 && position.getY() == 0)) {
+            log.debug("Invalid dialog position provided: {}, we'll center on first monitor instead", position);
+            dialog.setLocationRelativeTo(null);
+            return;
+        }
+
+        Rectangle rect = new Rectangle(position.x, position.y, dialog.getWidth(), dialog.getHeight());
+        rect.translate(-dialog.getWidth() / 2, -dialog.getHeight() / 2);
+        Point p = new Point((int)rect.getCenterX(), (int)rect.getCenterY());
+        log.debug("Calculated dialog centered at: {}", p);
+
+        if (!isWindowLocationValid(rect)) {
+            log.debug("Dialog position provided is out of bounds: {}, we'll center on the primary monitor instead", p);
+            dialog.setLocationRelativeTo(null);
+            return;
+        }
+
+        dialog.setLocation(rect.getLocation());
+    }
+
+    /**
+     * Validates if a given rectangle is within screen bounds
+     */
+    public static boolean isWindowLocationValid(Rectangle window) {
+        if(GraphicsEnvironment.isHeadless()) {
+            return false;
+        }
+
+        GraphicsDevice[] devices = GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices();
+        Area area = new Area();
+        for(GraphicsDevice gd : devices) {
+            for(GraphicsConfiguration gc : gd.getConfigurations()) {
+                area.add(new Area(gc.getBounds()));
+            }
+        }
+        return area.contains(window);
+    }
+
+    /**
+     * Detects if running from IDE or jar
+     * @return true if running from a jar, false if running from IDE
+     */
+    public static boolean isJar() {
+        if (classProtocol == null) {
+            classProtocol = SystemUtilities.class.getResource("").getProtocol();
+        }
+        return "jar".equals(classProtocol);
+    }
+
+    /**
+     * Todo:
+     * @return true if running from a jar, false if running from IDE
+     */
+    public static boolean isInstalled() {
+        Path path = getJarParentPath();
+        if(path == null) {
+            return false;
+        }
+        // Assume dist or out are signs we're running from some form of build directory
+        return !path.endsWith("dist") && !path.endsWith("out");
+    }
+
+    /**
+     * Determine if we're installed system-wide
+     */
+    public static boolean isInstalledSystemWide() {
+        if(isInstalled()) {
+            switch(getOs()) {
+                case MAC:
+                    return Objects.requireNonNull(getJarParentPath()).startsWith("/Applications");
+                case WINDOWS:
+                    return WindowsUtilities.isAdminOwned(Objects.requireNonNull(SystemUtilities.getJarPath()));
+                default:
+                    return Objects.requireNonNull(getJarParentPath()).startsWith("/opt");
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Allows in-line insertion of a property before another
+     * @param value the end of a value to insert before, assumes to end with File.pathSeparator
+     */
+    public static void insertPathProperty(String property, String value, String insertBefore) {
+        insertPathProperty(property, value, File.pathSeparator, insertBefore);
+    }
+
+    private static void insertPathProperty(String property, String value, String delimiter, String insertBefore) {
+        String currentValue = System.getProperty(property);
+        if(currentValue == null || currentValue.trim().isEmpty()) {
+            // Set it directly, there's nothing there
+            System.setProperty(property, value);
+            return;
+        }
+        // Blindly split on delimiter, safe according to POSIX standards
+        // See also: https://stackoverflow.com/a/29213487/3196753
+        String[] paths = currentValue.split(delimiter);
+        StringBuilder finalProperty = new StringBuilder();
+        boolean inserted = false;
+        for(String path : paths) {
+            if(!inserted && path.endsWith(insertBefore)) {
+                finalProperty.append(value + delimiter);
+                inserted = true;
+            }
+            finalProperty.append(path + delimiter);
+        }
+        // Add to end if delimiter wasn't found
+        if(!inserted) {
+            finalProperty.append(value);
+        }
+        // Truncate trailing delimiter
+        if(StringUtils.endsWith(finalProperty, delimiter)) {
+            finalProperty.setLength(finalProperty.length() - delimiter.length());
+        }
+        System.setProperty(property, finalProperty.toString());
+    }
+
+    public static boolean isJDK() {
+        String path = System.getProperty("sun.boot.library.path");
+        if(path != null) {
+            String javacPath = "";
+            if(path.endsWith(File.separator + "bin")) {
+                javacPath = path;
+            } else {
+                int libIndex = path.lastIndexOf(File.separator + "lib");
+                if(libIndex > 0) {
+                    javacPath = path.substring(0, libIndex) + File.separator + "bin";
+                }
+            }
+            if(!javacPath.isEmpty()) {
+                return new File(javacPath, "javac").exists() || new File(javacPath, "javac.exe").exists();
+            }
+        }
+        return false;
+    }
+
+    @Deprecated
+    public static boolean hasMonocle() {
+        if(hasMonocle == null) {
+            try {
+                Class.forName("com.sun.glass.ui.monocle.MonoclePlatformFactory");
+                hasMonocle = true;
+            } catch (ClassNotFoundException | UnsupportedClassVersionError e) {
+                hasMonocle = false;
+            }
+        }
+        return hasMonocle;
+    }
+
+    public static final Version[] JDK_8266929_VERSIONS = {
+            Version.valueOf("11.0.11"),
+            Version.valueOf("1.8.0+291"),
+            Version.valueOf("1.8.0+292")
+    };
+
+    /**
+     * Fixes JDK-8266929 by clearing the oidTable
+     * See also: https://github.com/qzind/tray/issues/814
+     */
+    public static void clearAlgorithms() {
+        boolean needsPatch = false;
+        for(Version affected : JDK_8266929_VERSIONS) {
+            if(affected.getMajorVersion() == 1) {
+                // Java 1.8 honors build/update information
+                if(affected.compareWithBuildsTo(Constants.JAVA_VERSION) == 0) {
+                    needsPatch = true;
+                }
+            } else if (affected.compareTo(Constants.JAVA_VERSION) == 0) {
+                // Java 9.0+ ignores build/update information
+                needsPatch = true;
+            }
+        }
+        if(!needsPatch) {
+            log.debug("Skipping JDK-8266929 patch for {}", Constants.JAVA_VERSION);
+            return;
+        }
+        try {
+            log.info("Applying JDK-8266929 patch");
+            Class<?> algorithmIdClass = Class.forName("sun.security.x509.AlgorithmId");
+            java.lang.reflect.Field oidTableField = algorithmIdClass.getDeclaredField("oidTable");
+            oidTableField.setAccessible(true);
+            // Set oidTable to null
+            oidTableField.set(algorithmIdClass, null);
+            // Java 1.8
+            if(Constants.JAVA_VERSION.getMajorVersion() == 1) {
+                java.lang.reflect.Field initOidTableField = algorithmIdClass.getDeclaredField("initOidTable");
+                initOidTableField.setAccessible(true);
+                // Set init flag back to false
+                initOidTableField.set(algorithmIdClass, false);
+            }
+            log.info("Successfully applied JDK-8266929 patch");
+        } catch (Exception e) {
+            log.warn("Unable to apply JDK-8266929 patch.  Some algorithms may fail.", e);
+        }
+    }
+
+    public static String getHostName() {
+        String hostName = SystemUtilities.isWindows() ? WindowsUtilities.getHostName() : UnixUtilities.getHostName();
+        if(hostName == null || hostName.trim().isEmpty()) {
+            log.warn("Couldn't get hostname using internal techniques, will fallback to command line instead");
+            hostName = ShellUtilities.getHostName().toUpperCase(); // uppercase to match others
+        }
+        return hostName;
+    }
+
+    /**
+     * A challenge which can only be calculated by an app installed and running on this machine
+     * Calculates two bytes:
+     * - First byte is a salted version of the timestamp of qz-tray.jar
+     * - Second byte is a throw-away byte
+     * - Bytes are converted to Base64 and returned as a String
+     */
+    public static String calculateSaltedChallenge() {
+        int salt = new Random().nextInt(9);
+        long salted = (calculateChallenge() * 10) + salt;
+        long obfuscated = salted * new Random().nextInt(9);
+        ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 2);
+        buffer.putLong(obfuscated);
+        buffer.putLong(0, salted);
+        return new String(Base64.encodeBase64(buffer.array(), false), StandardCharsets.UTF_8);
+    }
+
+    private static long calculateChallenge() {
+        Path jarPath;
+        if(SystemUtilities.isJar()) {
+            jarPath = getJarPath();
+        } else {
+            // Running from IDE: Try to guess .jar location
+            if(SystemUtilities.isMac()) {
+                // 2.2+
+                jarPath = Paths.get(Installer.getInstance().getDestination(), "Contents", "Resources", Constants.PROPS_FILE + ".jar");
+                if(!jarPath.toFile().exists()) {
+                    // 2.1
+                    jarPath = Paths.get(Installer.getInstance().getDestination(), Constants.PROPS_FILE + ".jar");
+                }
+            } else {
+                jarPath = Paths.get(Installer.getInstance().getDestination(), Constants.PROPS_FILE + ".jar");
+            }
+        }
+        if (jarPath.toFile().exists()) {
+            return jarPath.toFile().lastModified();
+        }
+        return -1L; // Fallback
+    }
+
+    /**
+     * For "Restart Now" button
+     */
+    public static String calculatePidChallenge(String pid, int saltLength) {
+        // more salt
+        String alphabet = "0123456789abcdefghijklmnopqrstuvwxyz";
+        StringBuilder pidSalted = new StringBuilder(saltLength + pid.length());
+        for (int i = 0; i < saltLength; i++) {
+            int index = ThreadLocalRandom.current().nextInt(alphabet.length());
+            pidSalted.append(alphabet.charAt(index));
+        }
+        pidSalted.append(pid);
+
+        StringBuilder pidChallenge = new StringBuilder();
+        pidChallenge.append(new String(Base64.encodeBase64(pidSalted.toString().getBytes(StandardCharsets.UTF_8), false)));
+        pidChallenge.append(calculateSaltedChallenge());
+        return new String(Base64.encodeBase64(pidChallenge.toString().getBytes(StandardCharsets.UTF_8), false));
+    }
+
+    /**
+     * For "Restart Now" button
+     */
+    public static Boolean validatePidChallenge(String pid, String challenge, int saltLength) {
+        String decodedBoth = new String(Base64.decodeBase64(challenge), StandardCharsets.UTF_8);
+        int pidSaltedLength = ((saltLength + pid.length() + 2) / 3) * 4;
+        String pidSalted = decodedBoth.substring(0, pidSaltedLength);
+        String pidSaltedDecoded = new String(Base64.decodeBase64(pidSalted), StandardCharsets.UTF_8);
+        String pidDecoded = pidSaltedDecoded.substring(saltLength);
+        if(!pid.equals(pidDecoded)) {
+            return false;
+        }
+
+        String challengeDecoded = decodedBoth.substring(pidSaltedLength);
+        return validateSaltedChallenge(challengeDecoded);
+    }
+
+    /**
+     * Decodes challenge string to see if it originated from this application
+     * - Base64 string is decoded into two bytes
+     * - First byte is unsalted
+     * - Second byte is ignored
+     * - If unsalted value of first byte matches the timestamp of qz-tray.jar, return true
+     * - If unsalted value doesn't match or if any exceptions occurred, we assume the message is invalid
+     */
+    public static boolean validateSaltedChallenge(String message) {
+        try {
+            log.info("Attempting to validating challenge: {}", message);
+            byte[] decoded = Base64.decodeBase64(message);
+            ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 2);
+            buffer.put(decoded);
+            // Explicit cast, per https://github.com/qzind/tray/issues/1055
+            ((Buffer)buffer).flip();//need flip
+            long salted = buffer.getLong(0); // only first byte matters
+            long challenge = salted / 10L;
+            return challenge == calculateChallenge();
+        } catch(Exception e) {
+            log.warn("An exception occurred validating challenge: {}", message, e);
+        }
+        return false;
+    }
+
+    /**
+     * Cross-platform SystemTray detector
+     */
+    public static boolean isSystemTraySupported() {
+        if(!App.isHeadless()) {
+            switch(getOs()) {
+                case WINDOWS:
+                    if(WindowsUtilities.isHiddenSystemTray()) {
+                        return false;
+                    }
+                    break;
+                case MAC:
+                    break;
+                default:
+                    // Linux System Tray support is abysmal, always use TaskbarTrayIcon
+                    return false;
+            }
+            return SystemTray.isSupported();
+        }
+        return false;
+    }
+
+    public static String parseRootDomain(String urlString) {
+        try {
+            // 1. Parse the URL string
+            URL url = new URL(urlString);
+            String host = url.getHost(); // This returns "subdomain.example.com"
+
+            // 2. Split the host by the dot (.)
+            String[] parts = host.split("\\.");
+
+            // 3. Check if the host has enough parts (e.g., at least 'example' and 'com')
+            if (parts.length >= 2) {
+                return parts[parts.length - 2] + "." + parts[parts.length - 1];
+            }
+        } catch (MalformedURLException ignore) {}
+
+        return null;
+    }
+}
