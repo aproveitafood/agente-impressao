@@ -53,7 +53,12 @@ public class BasicDialog extends JDialog implements Themeable {
         buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         buttonPanel.add(new JSeparator(JSeparator.HORIZONTAL));
         buttonPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        closeButton = addPanelButton("Close", IconCache.Icon.ALLOW_ICON, KeyEvent.VK_C);
+        closeButton = addPanelButton("Fechar", (Icon)null, KeyEvent.VK_F);
+        closeButton.setBackground(Constants.BRAND_PRIMARY_COLOR);
+        closeButton.setForeground(Color.WHITE);
+        closeButton.setOpaque(true);
+        closeButton.setContentAreaFilled(true);
+        closeButton.setBorder(BorderFactory.createLineBorder(Constants.BRAND_PRIMARY_COLOR.darker()));
         closeButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {

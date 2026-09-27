@@ -63,15 +63,15 @@ public class LogDialog extends BasicDialog {
         logArea.setPreferredSize(new Dimension(fm.charWidth('m') * COLS, fm.getHeight() * ROWS));
 
         JPopupMenu popup = new JPopupMenu();
-        JMenuItem copyItem = new JMenuItem("Copy", getIcon(IconCache.Icon.COPY_ICON));
+        JMenuItem copyItem = new JMenuItem("Copiar", getIcon(IconCache.Icon.COPY_ICON));
         copyItem.addActionListener(e -> {
             logArea.copy();
         });
-        JMenuItem copyAllItem = new JMenuItem("Copy All", getIcon(IconCache.Icon.COPY_ICON));
+        JMenuItem copyAllItem = new JMenuItem("Copiar tudo", getIcon(IconCache.Icon.COPY_ICON));
         copyAllItem.addActionListener(e -> {
             Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(logArea.getText()), null);
         });
-        JMenuItem clearItem = new JMenuItem("Clear All", getIcon(IconCache.Icon.DELETE_ICON));
+        JMenuItem clearItem = new JMenuItem("Limpar tudo", getIcon(IconCache.Icon.DELETE_ICON));
         clearItem.addActionListener(e -> {
             logArea.setText(null);
             writeTarget.getBuffer().setLength(0);
@@ -84,7 +84,7 @@ public class LogDialog extends BasicDialog {
         DefaultCaret caret = (DefaultCaret) logArea.getCaret();
         caret.setUpdatePolicy(DefaultCaret.NEVER_UPDATE); // the default caret does some autoscroll stuff, we don't want that
 
-        JLabel maxLinesLabel = new JLabel("Max Lines:");
+        JLabel maxLinesLabel = new JLabel("Máximo de linhas:");
         JTextField maxLinesField = new JTextField(4);
         logLines = PrefsSearch.getInt(ArgValue.TRAY_LOG_LINES, prefs);
         maxLinesField.setText("" + logLines);
@@ -92,10 +92,10 @@ public class LogDialog extends BasicDialog {
         maxLinesField.setHorizontalAlignment(SwingConstants.RIGHT);
         maxLinesLabel.setLabelFor(maxLinesField);
 
-        scrollCheckBox = new JCheckBox("Auto-Scroll");
+        scrollCheckBox = new JCheckBox("Rolar automaticamente");
         scrollCheckBox.setSelected(PrefsSearch.getBoolean(ArgValue.TRAY_LOG_SCROLL));
 
-        JCheckBox wrapCheckBox = new JCheckBox("Wrap Text");
+        JCheckBox wrapCheckBox = new JCheckBox("Quebrar linhas");
         wrapCheckBox.setSelected(PrefsSearch.getBoolean(ArgValue.TRAY_LOG_WRAP));
         logArea.setWrapping(PrefsSearch.getBoolean(ArgValue.TRAY_LOG_WRAP));
 
@@ -109,7 +109,7 @@ public class LogDialog extends BasicDialog {
         writeTarget = createWriteTarget();
 
         // TODO:  Fix button panel resizing issues
-        JButton clearButton = addPanelButton("Clear", IconCache.Icon.DELETE_ICON, KeyEvent.VK_L);
+        JButton clearButton = addPanelButton("Limpar", IconCache.Icon.DELETE_ICON, KeyEvent.VK_L);
         clearButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
@@ -206,7 +206,7 @@ public class LogDialog extends BasicDialog {
 
                 // Issue NFE warning
                 caller.setForeground(Constants.WARNING_COLOR);
-                caller.setToolTipText("Invalid value");
+                caller.setToolTipText("Valor inválido");
             }
         });
     }

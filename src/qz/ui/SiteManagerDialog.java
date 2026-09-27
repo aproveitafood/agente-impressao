@@ -38,17 +38,16 @@ public class SiteManagerDialog extends BasicDialog implements Runnable {
 
     private static final Logger log = LogManager.getLogger(SiteManagerDialog.class);
 
-    private static final String IMPORT_NEEDED = "The provided certificate \"%s\" is unrecognized and not yet trusted.\n"  +
-            "Would you like to automatically copy it to \"%s\"?";
-    private static final String IMPORT_FAILED = "Failed to import certificate.  Please import manually.";
-    private static final String INVALID_CERTIFICATE = "An exception occurred importing the certificate.  Please check the logs for details.";
-    private static final String IMPORT_QUESTION = "Successfully created a new demo keypair.  Automatically install?";
+    private static final String IMPORT_NEEDED = "O certificado \"%s\" não é reconhecido nem confiável.\n" +
+            "Deseja copiá-lo automaticamente para \"%s\"?";
+    private static final String IMPORT_FAILED = "Não foi possível importar o certificado. Faça a importação manualmente.";
+    private static final String INVALID_CERTIFICATE = "Ocorreu um erro ao importar o certificado. Consulte os registros do aplicativo.";
+    private static final String IMPORT_QUESTION = "Par de chaves de demonstração criado. Deseja instalá-lo automaticamente?";
 
-    private static final String DEMO_CERT_QUESTION = "Create a new demo keypair for %s?\n" +
-            "* This keypair will only work on this computer.\n" +
-            "* This should only be done by developers.\n" +
-            "* See also https://qz.io/wiki/signing";
-    private static final String DEMO_CERT_NAME = String.format("%s Demo Cert", Constants.ABOUT_TITLE);
+    private static final String DEMO_CERT_QUESTION = "Criar um novo par de chaves de demonstração para %s?\n" +
+            "* Este par de chaves só funcionará neste computador.\n" +
+            "* Recurso destinado a desenvolvimento.\n";
+    private static final String DEMO_CERT_NAME = String.format("Certificado de demonstração do %s", Constants.APP_DISPLAY_NAME);
 
     private JSplitPane splitPane;
 
@@ -112,7 +111,7 @@ public class SiteManagerDialog extends BasicDialog implements Runnable {
         });
         plainBorder = tabbedPane.getBorder();
         plainBackground = tabbedPane.getBackground();
-        dragBorder = BorderFactory.createLineBorder(Constants.TRUSTED_COLOR);
+        dragBorder = BorderFactory.createLineBorder(Constants.BRAND_PRIMARY_COLOR);
 
         final ListModel allowListModel = allowList.getList().getModel();
         final ListModel blockListModel = blockList.getList().getModel();
@@ -152,8 +151,8 @@ public class SiteManagerDialog extends BasicDialog implements Runnable {
         addButton = new JButton("+");
         Font addFont = addButton.getFont();
         JPopupMenu addMenu = new JPopupMenu();
-        JMenuItem browseItem = new JMenuItem("Browse...", iconCache.getIcon(IconCache.Icon.FOLDER_ICON));
-        browseItem.setToolTipText("Browse for a certificate to import.");
+        JMenuItem browseItem = new JMenuItem("Procurar...", iconCache.getIcon(IconCache.Icon.FOLDER_ICON));
+        browseItem.setToolTipText("Selecione um certificado para importar.");
         browseItem.setMnemonic(KeyEvent.VK_B);
         browseItem.addActionListener(e -> {
             File chooseFolder = null;
@@ -170,31 +169,31 @@ public class SiteManagerDialog extends BasicDialog implements Runnable {
             fileDialog.setVisible(true);
             addCertificates(fileDialog.getFiles(), getSelectedList(), true);
         });
-        JMenuItem createNewItem = new JMenuItem("Create New...", iconCache.getIcon(IconCache.Icon.SETTINGS_ICON));
-        createNewItem.setToolTipText("Developers only: Create and import a new demo keypair for signing.");
+        JMenuItem createNewItem = new JMenuItem("Criar novo...", iconCache.getIcon(IconCache.Icon.SETTINGS_ICON));
+        createNewItem.setToolTipText("Cria e importa um par de chaves de demonstração.");
         createNewItem.setMnemonic(KeyEvent.VK_N);
         createNewItem.addActionListener(e -> {
-            int generateCert = JOptionPane.showConfirmDialog(this, String.format(DEMO_CERT_QUESTION, Constants.ABOUT_TITLE), "Please Confirm", JOptionPane.YES_NO_OPTION);
+            int generateCert = JOptionPane.showConfirmDialog(this, String.format(DEMO_CERT_QUESTION, Constants.APP_DISPLAY_NAME), "Confirmação", JOptionPane.YES_NO_OPTION);
             if(generateCert != JOptionPane.YES_OPTION) {
                 return;
             }
             try {
                 Path created = createDemoCertificate();
-                int installKeypair = JOptionPane.showConfirmDialog(this, IMPORT_QUESTION, "Keypair Created", JOptionPane.YES_NO_OPTION);
+                int installKeypair = JOptionPane.showConfirmDialog(this, IMPORT_QUESTION, "Par de chaves criado", JOptionPane.YES_NO_OPTION);
                 if(installKeypair == JOptionPane.YES_OPTION) {
                     addCertificates(new File[] {created.resolve(Constants.SIGNING_CERTIFICATE).toFile()}, allowList, true);
                 }
                 ShellUtilities.browseDirectory(created);
             }
             catch(Throwable t) {
-                JOptionPane.showMessageDialog(this, "Sorry, an error occurred, please check the logs.");
+                JOptionPane.showMessageDialog(this, "Ocorreu um erro. Consulte os registros do aplicativo.");
                 log.error("An exception occurred creating or installing the demo certificate", t);
             }
         });
         addMenu.add(browseItem);
         addMenu.add(createNewItem);
         addButton.setFont(addFont.deriveFont(Font.BOLD, addFont.getSize() * 1.50f));
-        addButton.setForeground(Constants.TRUSTED_COLOR);
+        addButton.setForeground(Constants.BRAND_PRIMARY_COLOR);
         addButton.setBorderPainted(false);
         addButton.addMouseListener(new MouseAdapter() {
             @Override
@@ -452,7 +451,7 @@ public class SiteManagerDialog extends BasicDialog implements Runnable {
             }
             catch(CertificateException | IOException e) {
                 log.warn("Unable to import cert {}", file, e);
-                JOptionPane.showMessageDialog(this, String.format(INVALID_CERTIFICATE), "Import failed", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(this, String.format(INVALID_CERTIFICATE), "Falha na importação", JOptionPane.ERROR_MESSAGE);
             }
         }
     }
@@ -462,7 +461,7 @@ public class SiteManagerDialog extends BasicDialog implements Runnable {
         String message = String.format(IMPORT_NEEDED,
                                        cert.getCommonName(),
                                        override);
-        int copyAnswer = JOptionPane.showConfirmDialog(this, message, "Unrecognized Certificate", JOptionPane.YES_NO_OPTION);
+        int copyAnswer = JOptionPane.showConfirmDialog(this, message, "Certificado não reconhecido", JOptionPane.YES_NO_OPTION);
         if(copyAnswer == JOptionPane.YES_OPTION) {
             Cursor backupCursor = getCursor();
             setCursor(new Cursor(Cursor.WAIT_CURSOR));
@@ -473,7 +472,7 @@ public class SiteManagerDialog extends BasicDialog implements Runnable {
                 addCertificates(new File[] { file }, allowList, true);
                 refreshStrictModeCheckbox();
             } else {
-                JOptionPane.showMessageDialog(this, String.format(IMPORT_FAILED), "Import failed", JOptionPane.WARNING_MESSAGE);
+                JOptionPane.showMessageDialog(this, String.format(IMPORT_FAILED), "Falha na importação", JOptionPane.WARNING_MESSAGE);
             }
         }
     }

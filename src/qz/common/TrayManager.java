@@ -89,7 +89,7 @@ public class TrayManager {
      * Create a AutoHideJSystemTray with the specified name/text
      */
     public TrayManager() {
-        name = Constants.ABOUT_TITLE + " " + Constants.VERSION;
+        name = Constants.APP_DISPLAY_NAME;
 
         // Set strict certificate mode preference
         Certificate.setTrustBuiltIn(!getPref(TRAY_STRICTMODE));
@@ -154,7 +154,7 @@ public class TrayManager {
             System.setProperty("sun.java2d.print.polling", "false");
         }
 
-        gatewayDialog = new GatewayDialog(isHeadless(), null,"Action Required", iconCache);
+        gatewayDialog = new GatewayDialog(isHeadless(), null,"Ação necessária", iconCache);
 
         if(isHeadless()) {
             // If isHeadless(), look for a location to forward message dialogs to
@@ -164,7 +164,7 @@ public class TrayManager {
             componentList.add(gatewayDialog.getDialog());
 
             // The ok/cancel dialog
-            confirmDialog = new ConfirmDialog(null, "Please Confirm", iconCache);
+            confirmDialog = new ConfirmDialog(null, "Confirmação", iconCache);
             componentList.add(confirmDialog);
 
             // Detect theme changes
@@ -234,31 +234,31 @@ public class TrayManager {
         JPopupMenu popup = new JPopupMenu();
         componentList.add(popup);
 
-        JMenu advancedMenu = new JMenu("Advanced");
+        JMenu advancedMenu = new JMenu("Avançado");
         advancedMenu.setMnemonic(KeyEvent.VK_A);
         advancedMenu.setIcon(iconCache.getIcon(SETTINGS_ICON));
 
-        JMenuItem sitesItem = new JMenuItem("Site Manager...", iconCache.getIcon(SAVED_ICON));
+        JMenuItem sitesItem = new JMenuItem("Gerenciar sites...", iconCache.getIcon(SAVED_ICON));
         sitesItem.setMnemonic(KeyEvent.VK_M);
         sitesItem.addActionListener(savedListener);
         sitesDialog = new SiteManagerDialog(sitesItem, iconCache, getUserPrefs());
         componentList.add(sitesDialog);
 
-        JMenuItem diagnosticMenu = new JMenu("Diagnostic");
+        JMenuItem diagnosticMenu = new JMenu("Diagnóstico");
 
-        JMenuItem browseApp = new JMenuItem("Browse App folder...", iconCache.getIcon(FOLDER_ICON));
+        JMenuItem browseApp = new JMenuItem("Abrir pasta do aplicativo...", iconCache.getIcon(FOLDER_ICON));
         browseApp.setToolTipText(SystemUtilities.getJarParentPath().toString());
         browseApp.setMnemonic(KeyEvent.VK_O);
         browseApp.addActionListener(e -> ShellUtilities.browseAppDirectory());
         diagnosticMenu.add(browseApp);
 
-        JMenuItem browseUser = new JMenuItem("Browse User folder...", iconCache.getIcon(FOLDER_ICON));
+        JMenuItem browseUser = new JMenuItem("Abrir pasta do usuário...", iconCache.getIcon(FOLDER_ICON));
         browseUser.setToolTipText(FileUtilities.USER_DIR.toString());
         browseUser.setMnemonic(KeyEvent.VK_U);
         browseUser.addActionListener(e -> ShellUtilities.browseDirectory(FileUtilities.USER_DIR));
         diagnosticMenu.add(browseUser);
 
-        JMenuItem browseShared = new JMenuItem("Browse Shared folder...", iconCache.getIcon(FOLDER_ICON));
+        JMenuItem browseShared = new JMenuItem("Abrir pasta compartilhada...", iconCache.getIcon(FOLDER_ICON));
         browseShared.setToolTipText(FileUtilities.SHARED_DIR.toString());
         browseShared.setMnemonic(KeyEvent.VK_S);
         browseShared.addActionListener(e -> ShellUtilities.browseDirectory(FileUtilities.SHARED_DIR));
@@ -266,21 +266,21 @@ public class TrayManager {
 
         diagnosticMenu.add(new JSeparator());
 
-        JCheckBoxMenuItem notificationsItem = new JCheckBoxMenuItem("Show all notifications");
-        notificationsItem.setToolTipText("Shows all connect/disconnect messages, useful for debugging purposes");
+        JCheckBoxMenuItem notificationsItem = new JCheckBoxMenuItem("Mostrar todas as notificações");
+        notificationsItem.setToolTipText("Exibe avisos de conexão e desconexão.");
         notificationsItem.setMnemonic(KeyEvent.VK_S);
         notificationsItem.setState(getPref(TRAY_NOTIFICATIONS));
         notificationsItem.addActionListener(notificationsListener);
         diagnosticMenu.add(notificationsItem);
 
-        JCheckBoxMenuItem monocleItem = new JCheckBoxMenuItem("Use Monocle for HTML");
-        monocleItem.setToolTipText("Use monocle platform for HTML printing (restart required)");
+        JCheckBoxMenuItem monocleItem = new JCheckBoxMenuItem("Modo compatível para impressão de páginas");
+        monocleItem.setToolTipText("Altera o modo de impressão de páginas. Requer reinicialização.");
         monocleItem.setMnemonic(KeyEvent.VK_U);
         monocleItem.setState(getPref(TRAY_MONOCLE));
         if(Constants.JAVA_VERSION.getMajorVersion() <= 8) {
             log.warn("Monocle engine is not available for this Java version");
             monocleItem.setEnabled(false);
-            monocleItem.setToolTipText("Monocle HTML engine is not available.");
+            monocleItem.setToolTipText("Este modo de impressão não está disponível.");
         }
         monocleItem.addActionListener(monocleListener);
 
@@ -290,25 +290,25 @@ public class TrayManager {
 
         diagnosticMenu.add(new JSeparator());
 
-        JMenuItem logItem = new JMenuItem("View logs (live feed)...", iconCache.getIcon(LOG_ICON));
+        JMenuItem logItem = new JMenuItem("Registros do aplicativo...", iconCache.getIcon(LOG_ICON));
         logItem.setMnemonic(KeyEvent.VK_L);
         logItem.addActionListener(logListener);
         diagnosticMenu.add(logItem);
         logDialog = new LogDialog(logItem, iconCache, getUserPrefs());
         componentList.add(logDialog);
 
-        JMenuItem zipLogs = new JMenuItem("Zip logs (to Desktop)");
-        zipLogs.setToolTipText("Zip diagnostic logs, place on Desktop");
+        JMenuItem zipLogs = new JMenuItem("Salvar registros na área de trabalho");
+        zipLogs.setToolTipText("Salva um arquivo com os registros do aplicativo.");
         zipLogs.setMnemonic(KeyEvent.VK_Z);
         zipLogs.addActionListener(e -> FileUtilities.zipLogs());
         diagnosticMenu.add(zipLogs);
 
-        JMenuItem desktopItem = new JMenuItem("Create Desktop shortcut", iconCache.getIcon(DESKTOP_ICON));
+        JMenuItem desktopItem = new JMenuItem("Criar atalho na área de trabalho", iconCache.getIcon(DESKTOP_ICON));
         desktopItem.setMnemonic(KeyEvent.VK_D);
         desktopItem.addActionListener(desktopListener());
 
-        anonymousItem = new JCheckBoxMenuItem("Block anonymous requests");
-        anonymousItem.setToolTipText("Blocks all requests that do not contain a valid certificate/signature");
+        anonymousItem = new JCheckBoxMenuItem("Bloquear conexões não verificadas");
+        anonymousItem.setToolTipText("Bloqueia solicitações sem uma assinatura válida.");
         anonymousItem.setMnemonic(KeyEvent.VK_K);
         anonymousItem.setState(Certificate.UNKNOWN.isBlocked());
         anonymousItem.addActionListener(anonymousListener);
@@ -322,11 +322,11 @@ public class TrayManager {
         advancedMenu.add(new JSeparator());
         advancedMenu.add(anonymousItem);
 
-        JMenuItem reloadItem = new JMenuItem("Reload", iconCache.getIcon(RELOAD_ICON));
+        JMenuItem reloadItem = new JMenuItem("Recarregar", iconCache.getIcon(RELOAD_ICON));
         reloadItem.setMnemonic(KeyEvent.VK_R);
         reloadItem.addActionListener(reloadListener);
 
-        JMenuItem aboutItem = new JMenuItem("About...", iconCache.getIcon(ABOUT_ICON));
+        JMenuItem aboutItem = new JMenuItem("Sobre o " + Constants.APP_DISPLAY_NAME, iconCache.getIcon(ABOUT_ICON));
         aboutItem.setMnemonic(KeyEvent.VK_B);
         aboutItem.addActionListener(aboutListener);
         aboutDialog = new AboutDialog(aboutItem, iconCache);
@@ -339,17 +339,17 @@ public class TrayManager {
 
         JSeparator separator = new JSeparator();
 
-        JCheckBoxMenuItem startupItem = new JCheckBoxMenuItem("Automatically start");
+        JCheckBoxMenuItem startupItem = new JCheckBoxMenuItem("Iniciar com o sistema");
         startupItem.setMnemonic(KeyEvent.VK_S);
         startupItem.setState(FileUtilities.isAutostart());
         startupItem.addActionListener(startupListener());
         if (!shortcutCreator.canAutoStart()) {
             startupItem.setEnabled(false);
             startupItem.setState(false);
-            startupItem.setToolTipText("Autostart has been disabled by the administrator");
+            startupItem.setToolTipText("A inicialização automática foi desativada pelo administrador.");
         }
 
-        JMenuItem exitItem = new JMenuItem("Exit", iconCache.getIcon(EXIT_ICON));
+        JMenuItem exitItem = new JMenuItem("Sair", iconCache.getIcon(EXIT_ICON));
         exitItem.addActionListener(exitListener);
 
         popup.add(advancedMenu);
@@ -377,8 +377,7 @@ public class TrayManager {
         public void actionPerformed(ActionEvent e) {
             JCheckBoxMenuItem j = (JCheckBoxMenuItem)e.getSource();
             getUserPrefs().setProperty(TRAY_MONOCLE, j.getState());
-            displayWarningMessage(String.format("A restart of %s is required to ensure this feature is %sabled.",
-                                                Constants.ABOUT_TITLE, j.getState()? "en":"dis"));
+            displayWarningMessage("Reinicie o aplicativo para aplicar esta alteração.");
         }
     };
 
@@ -420,14 +419,16 @@ public class TrayManager {
     private ActionListener startupListener() {
         return e -> {
             JCheckBoxMenuItem source = (JCheckBoxMenuItem)e.getSource();
-            if (!source.getState() && !confirmDialog.prompt("Remove " + name + " from startup?")) {
+            if (!source.getState() && !confirmDialog.prompt("Remover " + name + " da inicialização automática?")) {
                 source.setState(true);
                 return;
             }
             if (FileUtilities.setAutostart(source.getState())) {
-                displayInfoMessage("Successfully " + (source.getState() ? "enabled" : "disabled") + " autostart");
+                displayInfoMessage(source.getState()
+                        ? "Inicialização automática ativada."
+                        : "Inicialização automática desativada.");
             } else {
-                displayErrorMessage("Error " + (source.getState() ? "enabling" : "disabling") + " autostart");
+                displayErrorMessage("Não foi possível alterar a inicialização automática.");
             }
             source.setState(FileUtilities.isAutostart());
         };
@@ -445,7 +446,7 @@ public class TrayManager {
     private ActionListener reloadListener = new ActionListener() {
         public void actionPerformed(ActionEvent e) {
             if (reloadThread == null) {
-                showErrorDialog("Sorry, Reload has not yet been implemented.");
+                showErrorDialog("A opção de recarregar ainda não está disponível.");
             } else {
                 reloadThread.start();
             }
@@ -461,7 +462,7 @@ public class TrayManager {
     private final ActionListener exitListener = new ActionListener() {
         public void actionPerformed(ActionEvent e) {
             boolean showAllNotifications = getPref(TRAY_NOTIFICATIONS);
-            if (!showAllNotifications || confirmDialog.prompt("Exit " + name + "?")) { exit(0); }
+            if (!showAllNotifications || confirmDialog.prompt("Sair do " + name + "?")) { exit(0); }
         }
     };
 
@@ -484,7 +485,7 @@ public class TrayManager {
             return request.hasSavedCert();
         }
 
-        GatewayDialog.runSafely(isHeadless(), () -> gatewayDialog.prompt(UID, "%s wants to " + prompt, request, position));
+        GatewayDialog.runSafely(isHeadless(), () -> gatewayDialog.prompt(UID, "%s solicita autorização para " + prompt, request, position));
 
         GatewayDialog.Response response = gatewayDialog.getResponse();
         switch(response) {
@@ -518,7 +519,7 @@ public class TrayManager {
         if (FileUtilities.printLineToFile(Constants.ALLOW_FILE, cert.data())) {
             displayInfoMessage(String.format(Constants.ALLOW_SITES_TEXT, cert.getOrganization()));
         } else {
-            displayErrorMessage("Failed to write to file (Insufficient user privileges)");
+            displayErrorMessage("Não foi possível salvar a alteração. Verifique as permissões do usuário.");
         }
     }
 
@@ -526,7 +527,7 @@ public class TrayManager {
         if (FileUtilities.printLineToFile(Constants.BLOCK_FILE, cert.data())) {
             displayInfoMessage(String.format(Constants.BLOCK_SITES_TEXT, cert.getOrganization()));
         } else {
-            displayErrorMessage("Failed to write to file (Insufficient user privileges)");
+            displayErrorMessage("Não foi possível salvar a alteração. Verifique as permissões do usuário.");
         }
     }
 
@@ -534,14 +535,14 @@ public class TrayManager {
         if (server != null && server.getConnectors().length > 0) {
             singleInstanceCheck(websocketPorts);
 
-            displayInfoMessage("Server started on port(s) " + PrintSocketServer.getPorts(server));
+            displayInfoMessage("Serviço iniciado na(s) porta(s) " + PrintSocketServer.getPorts(server));
 
             if (!isHeadless()) {
-                aboutDialog.setServer(server);
+                aboutDialog.initComponents();
                 setDefaultIcon();
             }
         } else {
-            displayErrorMessage("Invalid server");
+            displayErrorMessage("Não foi possível iniciar o serviço local.");
         }
     }
 

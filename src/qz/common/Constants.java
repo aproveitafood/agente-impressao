@@ -32,6 +32,7 @@ public class Constants {
     public static final int BORDER_PADDING = 10;
 
     public static final String ABOUT_TITLE = "QZ Tray";
+    public static final String APP_DISPLAY_NAME = "Aproveita Food";
     public static final String ABOUT_EMAIL = "support@qz.io";
     public static final String ABOUT_URL = "https://qz.io";
     public static final String ABOUT_COMPANY = "QZ Industries, LLC";
@@ -48,7 +49,10 @@ public class Constants {
     public static final String VERSION_DOWNLOAD_URL = "https://github.com/qzind/tray/releases";
     public static final boolean ENABLE_DIAGNOSTICS = true; // Diagnostics menu (logs, etc)
 
-    public static final String BRAND_COLOR_HEX = "#44aa53";
+    public static final String BRAND_COLOR_HEX = "#BC361C";
+    public static final Color BRAND_PRIMARY_COLOR = Color.decode(BRAND_COLOR_HEX);
+    public static final Color BRAND_SUCCESS_COLOR = Color.decode("#6E8B4A");
+    public static final Color BRAND_DANGER_COLOR = Color.decode("#D84A2B");
     @SuppressWarnings("ConstantValue")
     public static final boolean IS_REBRANDED = !ABOUT_EMAIL.equals("support@qz.io");
 
@@ -63,19 +67,19 @@ public class Constants {
     public static final String PROBE_REQUEST = "getProgramName";
     public static final String PROBE_RESPONSE = ABOUT_TITLE;
 
-    public static final String ALLOW_SITES_TEXT = "Permanently allowed \"%s\" to access local resources";
-    public static final String BLOCK_SITES_TEXT = "Permanently blocked \"%s\" from accessing local resources";
+    public static final String ALLOW_SITES_TEXT = "Acesso permanente a recursos locais autorizado para \"%s\"";
+    public static final String BLOCK_SITES_TEXT = "Acesso permanente a recursos locais bloqueado para \"%s\"";
 
-    public static final String REMEMBER_THIS_DECISION = "Remember this decision";
-    public static final String STRICT_MODE_LABEL = "Use strict certificate mode";
-    public static final String STRICT_MODE_TOOLTIP = String.format("Prevents the ability to select \"%s\" for most websites", REMEMBER_THIS_DECISION);
-    public static final String STRICT_MODE_CONFIRM = String.format("Set strict certificate mode?  Most websites will stop working with %s.", ABOUT_TITLE);
-    public static final String ALLOW_SITES_LABEL = "Sites permanently allowed access";
-    public static final String BLOCK_SITES_LABEL = "Sites permanently blocked from access";
+    public static final String REMEMBER_THIS_DECISION = "Lembrar esta decisão";
+    public static final String STRICT_MODE_LABEL = "Usar modo estrito de certificados";
+    public static final String STRICT_MODE_TOOLTIP = String.format("Impede selecionar \"%s\" para a maioria dos sites", REMEMBER_THIS_DECISION);
+    public static final String STRICT_MODE_CONFIRM = String.format("Ativar o modo estrito de certificados? A maioria dos sites deixará de funcionar com %s.", ABOUT_TITLE);
+    public static final String ALLOW_SITES_LABEL = "Sites com acesso permanente autorizado";
+    public static final String BLOCK_SITES_LABEL = "Sites com acesso permanente bloqueado";
 
 
-    public static final String ALLOWED = "Allowed";
-    public static final String BLOCKED = "Blocked";
+    public static final String ALLOWED = "Autorizados";
+    public static final String BLOCKED = "Bloqueados";
 
     public static final String OVERRIDE_CERT = "override.crt";
     public static final String WHITELIST_CERT_DIR = "whitelist";

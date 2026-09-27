@@ -1,17 +1,13 @@
 package qz.ui;
 
-import com.github.zafarkhaja.semver.Version;
-import org.eclipse.jetty.server.Server;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import qz.common.AboutInfo;
 import qz.common.Constants;
 import qz.ui.component.EmLabel;
 import qz.ui.component.IconCache;
 import qz.ui.component.LinkLabel;
 import qz.utils.FileUtilities;
 import qz.utils.SystemUtilities;
-import qz.ws.PrintSocketServer;
 import qz.ws.substitutions.Substitutions;
 
 import javax.swing.*;
@@ -21,8 +17,6 @@ import java.awt.*;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.dnd.*;
 import java.io.File;
-import java.net.URI;
-import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -38,103 +32,45 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class AboutDialog extends BasicDialog implements Themeable {
 
     private static final Logger log = LogManager.getLogger(AboutDialog.class);
-    private final boolean limitedDisplay;
-    private Server server;
     private JLabel logo;
-    private JLabel lblUpdate;
-    private JButton updateButton;
 
     private JPanel contentPanel;
     private JToolBar headerBar;
+    private LinkLabel substitutionsLabel;
     private Border dropBorder;
-
-    // Use <html> allows word wrapping on a standard JLabel
-    static class TextWrapLabel extends JLabel {
-        TextWrapLabel(String text) {
-            super("<html>" + text + "</html>");
-        }
-    }
 
     public AboutDialog(JMenuItem menuItem, IconCache iconCache) {
         super(menuItem, iconCache);
-        limitedDisplay = Constants.IS_REBRANDED;
-    }
-
-    public void setServer(Server server) {
-        this.server = server;
-
-        initComponents();
+        setTitle("Sobre o " + Constants.APP_DISPLAY_NAME);
     }
 
     public void initComponents() {
-        JLabel lblAbout = new EmLabel(Constants.ABOUT_TITLE, 3);
+        logo = new JLabel();
+        logo.setAlignmentX(Component.CENTER_ALIGNMENT);
+        logo.setBorder(new EmptyBorder(4, 0, 10, 0));
+        ImageIcon windowIcon = loadBrandImage("aproveita-logo-icon.png", 32, 32);
+        if (windowIcon != null) {
+            setIconImage(windowIcon.getImage());
+        }
+        refreshLogo();
 
-        JPanel infoPanel = new JPanel();
-        infoPanel.setLayout(new BoxLayout(infoPanel, BoxLayout.Y_AXIS));
-
-        LinkLabel linkLibrary = getLinkLibrary();
-        Box versionBox = Box.createHorizontalBox();
-        versionBox.setAlignmentX(Component.LEFT_ALIGNMENT);
-        versionBox.add(new JLabel(String.format("%s (Java)", Constants.VERSION)));
-
-        JPanel aboutPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
-        logo = new JLabel(getIcon(IconCache.Icon.LOGO_ICON, SystemUtilities.isDarkDesktop()));
-        logo.setBorder(new EmptyBorder(0, 0, 0, limitedDisplay ? 0 : 20));
+        JPanel aboutPanel = new JPanel();
+        aboutPanel.setLayout(new BoxLayout(aboutPanel, BoxLayout.PAGE_AXIS));
+        aboutPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
         aboutPanel.add(logo);
 
-        if (!limitedDisplay) {
-            LinkLabel linkNew = new LinkLabel("What's New?");
-            linkNew.setLinkLocation(Constants.VERSION_DOWNLOAD_URL);
+        JLabel lblAbout = new EmLabel("Impressão de pedidos", 1.4f, false);
+        lblAbout.setAlignmentX(Component.CENTER_ALIGNMENT);
+        aboutPanel.add(lblAbout);
 
-            lblUpdate = new JLabel();
-            updateButton = new JButton();
-            updateButton.setVisible(false);
-            updateButton.addActionListener(evt -> {
-                try { Desktop.getDesktop().browse(new URL(Constants.ABOUT_DOWNLOAD_URL).toURI()); }
-                catch(Exception e) { log.error("", e); }
-            });
-            checkForUpdate();
-            versionBox.add(Box.createHorizontalStrut(12));
-            versionBox.add(linkNew);
-
-            infoPanel.add(lblAbout);
-            infoPanel.add(Box.createVerticalGlue());
-            infoPanel.add(versionBox);
-            infoPanel.add(Box.createVerticalGlue());
-            infoPanel.add(lblUpdate);
-            infoPanel.add(updateButton);
-            infoPanel.add(Box.createVerticalGlue());
-            infoPanel.add(new TextWrapLabel(String.format("%s is written and supported by %s.", Constants.ABOUT_TITLE, Constants.ABOUT_COMPANY)));
-            infoPanel.add(Box.createVerticalGlue());
-            infoPanel.add(new TextWrapLabel(String.format("If using %s commercially, please first reach out to the website publisher for support issues.", Constants.ABOUT_TITLE)));
-            infoPanel.add(Box.createVerticalGlue());
-            infoPanel.add(linkLibrary);
-            infoPanel.setPreferredSize(logo.getPreferredSize());
-        } else {
-            LinkLabel linkLabel = new LinkLabel(Constants.ABOUT_URL);
-            linkLabel.setLinkLocation(Constants.ABOUT_URL);
-
-            infoPanel.add(Box.createVerticalGlue());
-            infoPanel.add(lblAbout);
-            infoPanel.add(versionBox);
-            infoPanel.add(Box.createVerticalStrut(16));
-            infoPanel.add(linkLabel);
-            infoPanel.add(Box.createVerticalStrut(8));
-            infoPanel.add(linkLibrary);
-            infoPanel.add(Box.createVerticalGlue());
-            infoPanel.add(Box.createHorizontalStrut(16));
-        }
-
-        aboutPanel.add(infoPanel);
+        JLabel description = new JLabel("Apoio local às operações do " + Constants.APP_DISPLAY_NAME + ".");
+        description.setAlignmentX(Component.CENTER_ALIGNMENT);
+        aboutPanel.add(Box.createVerticalStrut(6));
+        aboutPanel.add(description);
 
         contentPanel = new JPanel();
         contentPanel.setLayout(new BoxLayout(contentPanel, BoxLayout.PAGE_AXIS));
         contentPanel.add(aboutPanel);
-        contentPanel.add(new JSeparator());
-
-        if (!limitedDisplay) {
-            contentPanel.add(getSupportPanel());
-        }
 
         setContent(contentPanel, true);
         contentPanel.setDropTarget(createDropTarget());
@@ -142,33 +78,24 @@ public class AboutDialog extends BasicDialog implements Themeable {
         refreshHeader();
     }
 
-    private static JPanel getSupportPanel() {
-        LinkLabel lblLicensing = new LinkLabel("Licensing Information", 0.9f, false);
-        lblLicensing.setLinkLocation(Constants.ABOUT_LICENSING_URL);
-
-        LinkLabel lblSupport = new LinkLabel("Support Information", 0.9f, false);
-        lblSupport.setLinkLocation(Constants.ABOUT_SUPPORT_URL);
-
-        LinkLabel lblPrivacy = new LinkLabel("Privacy Policy", 0.9f, false);
-        lblPrivacy.setLinkLocation(Constants.ABOUT_PRIVACY_URL);
-
-        JPanel supportPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 80, 10));
-        supportPanel.add(lblLicensing);
-        supportPanel.add(lblSupport);
-        supportPanel.add(lblPrivacy);
-        return supportPanel;
-    }
-
-    private LinkLabel getLinkLibrary() {
-        LinkLabel linkLibrary = new LinkLabel("Detailed library information");
-        if(server != null && server.isRunning() && !server.isStopping()) {
-            // Some OSs (e.g. FreeBSD) return null for server.getURI(), fallback to sane values
-            URI uri = server.getURI();
-            String scheme = uri == null ? "http" : uri.getScheme();
-            int port = uri == null ? PrintSocketServer.getWebsocketPorts().getInsecurePort(): uri.getPort();
-            linkLibrary.setLinkLocation(String.format("%s://%s:%s", scheme, AboutInfo.getPreferredHostname(), port));
+    private ImageIcon loadBrandImage(String fileName, int maxWidth, int maxHeight) {
+        String resourcePath = "/qz/ui/resources/" + fileName;
+        java.net.URL resource = getClass().getResource(resourcePath);
+        if (resource == null) {
+            log.error("Missing bundled frontend brand image: {}", resourcePath);
+            return null;
         }
-        return linkLibrary;
+
+        ImageIcon source = new ImageIcon(resource);
+        if (source.getIconWidth() <= 0 || source.getIconHeight() <= 0) {
+            log.error("Unable to decode frontend brand image: {}", resourcePath);
+            return null;
+        }
+
+        double scale = Math.min((double) maxWidth / source.getIconWidth(), (double) maxHeight / source.getIconHeight());
+        int width = (int) Math.round(source.getIconWidth() * scale);
+        int height = (int) Math.round(source.getIconHeight() * scale);
+        return new ImageIcon(source.getImage().getScaledInstance(width, height, Image.SCALE_SMOOTH));
     }
 
     private JToolBar getHeaderBar() {
@@ -178,7 +105,7 @@ public class AboutDialog extends BasicDialog implements Themeable {
         headerBar.setOpaque(true);
         headerBar.setFloatable(false);
 
-        LinkLabel substitutionsLabel = new LinkLabel("Substitutions are in effect for this machine");
+        substitutionsLabel = new LinkLabel("Configurações personalizadas estão ativas neste computador");
         JButton refreshButton = new JButton("", getIcon(IconCache.Icon.RELOAD_ICON));
         refreshButton.setOpaque(false);
         refreshButton.addActionListener(e -> {
@@ -243,29 +170,10 @@ public class AboutDialog extends BasicDialog implements Themeable {
         setDropBorder(false);
     }
 
-    private void checkForUpdate() {
-        Version latestVersion = AboutInfo.findLatestVersion();
-        if (latestVersion.greaterThan(Constants.VERSION)) {
-            lblUpdate.setText("An update is available:");
-
-            updateButton.setText("Download " + latestVersion);
-            updateButton.setVisible(true);
-        } else if (latestVersion.lessThan(Constants.VERSION)) {
-            lblUpdate.setText("You are on a beta release.");
-
-            updateButton.setText("Revert to stable " + latestVersion);
-            updateButton.setVisible(true);
-        } else {
-            lblUpdate.setText("You have the latest version.");
-
-            updateButton.setVisible(false);
-        }
-    }
-
     private void setDropBorder(boolean isShown) {
         if(isShown) {
             if(contentPanel.getBorder() == null) {
-                dropBorder = BorderFactory.createDashedBorder(Constants.TRUSTED_COLOR, 3, 5, 5, true);
+                dropBorder = BorderFactory.createDashedBorder(Constants.BRAND_PRIMARY_COLOR, 3, 5, 5, true);
                 contentPanel.setBorder(dropBorder);
             }
         } else {
@@ -274,7 +182,7 @@ public class AboutDialog extends BasicDialog implements Themeable {
     }
 
     private void blinkDropBorder(boolean success) {
-        Color borderColor = success ? Color.GREEN : Constants.WARNING_COLOR;
+        Color borderColor = success ? Constants.BRAND_SUCCESS_COLOR : Constants.BRAND_DANGER_COLOR;
         dropBorder = BorderFactory.createDashedBorder(borderColor, 3, 5, 5, true);
         AtomicBoolean toggled = new AtomicBoolean(true);
         int blinkCount = 3;
@@ -294,8 +202,8 @@ public class AboutDialog extends BasicDialog implements Themeable {
 
     private void refreshHeader() {
         if(headerBar != null) {
-            headerBar.setBackground(SystemUtilities.isDarkDesktop()?
-                                            Constants.TRUSTED_COLOR.darker().darker():Constants.TRUSTED_COLOR_DARK);
+            headerBar.setBackground(Constants.BRAND_PRIMARY_COLOR);
+            substitutionsLabel.setForeground(Color.WHITE);
             headerBar.setVisible(Substitutions.areActive());
             pack();
         }
@@ -303,17 +211,11 @@ public class AboutDialog extends BasicDialog implements Themeable {
 
     private void refreshLogo() {
         if(logo != null) {
-            logo.setIcon(getIcon(IconCache.Icon.LOGO_ICON, SystemUtilities.isDarkDesktop()));
+            ImageIcon brandLogo = loadBrandImage(SystemUtilities.isDarkDesktop()
+                    ? "aproveita-logo-light.png"
+                    : "aproveita-logo-horizontal.png", 210, 80);
+            logo.setIcon(brandLogo == null ? getIcon(IconCache.Icon.LOGO_ICON, SystemUtilities.isDarkDesktop()) : brandLogo);
         }
-    }
-
-    @Override
-    public void setVisible(boolean visible) {
-        if (visible && !limitedDisplay) {
-            checkForUpdate();
-        }
-
-        super.setVisible(visible);
     }
 
     @Override

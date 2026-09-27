@@ -5,6 +5,7 @@ import org.apache.logging.log4j.Logger;
 import qz.common.Constants;
 import qz.ui.Themeable;
 import qz.utils.ShellUtilities;
+import qz.utils.SystemUtilities;
 
 import javax.accessibility.AccessibleContext;
 import javax.accessibility.AccessibleRole;
@@ -77,7 +78,9 @@ public class LinkLabel extends JButton implements Themeable {
 
     @Override
     public void refresh() {
-        setForeground(Constants.TRUSTED_COLOR);
+        setForeground(SystemUtilities.isDarkDesktop()
+                ? Color.decode("#F28A2E")
+                : Constants.BRAND_PRIMARY_COLOR);
         setBorderPainted(false);
         setContentAreaFilled(false);
         setBorder(null);

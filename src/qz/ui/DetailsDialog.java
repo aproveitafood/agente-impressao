@@ -11,13 +11,13 @@ import javax.swing.*;
  * Small <code>JPanel</code> container for <code>RequestTable</code> and <code>CertificateTable</code>
  */
 public class DetailsDialog extends JPanel {
-    public static final String REQUEST_TABLE_LABEL = "Request";
+    public static final String REQUEST_TABLE_LABEL = "Solicitação";
     public static final String REQUEST_TABLE_NAME = String.format("%s Details", REQUEST_TABLE_LABEL);
-    public static final String REQUEST_TABLE_DESCRIPTION = "Signing details about this request.";
+    public static final String REQUEST_TABLE_DESCRIPTION = "Detalhes da assinatura desta solicitação.";
 
-    public static final String CERT_TABLE_LABEL = "Certificate";
+    public static final String CERT_TABLE_LABEL = "Certificado";
     public static final String CERT_TABLE_NAME = String.format("%s Details", CERT_TABLE_LABEL);
-    public static final String CERT_TABLE_DESCRIPTION = "Certificate details about this request.";
+    public static final String CERT_TABLE_DESCRIPTION = "Detalhes do certificado desta solicitação.";
 
     private RequestTable requestTable;
     private CertificateTable certTable;

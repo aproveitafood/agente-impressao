@@ -704,17 +704,8 @@ public class SystemUtilities {
      */
     public static boolean isSystemTraySupported() {
         if(!App.isHeadless()) {
-            switch(getOs()) {
-                case WINDOWS:
-                    if(WindowsUtilities.isHiddenSystemTray()) {
-                        return false;
-                    }
-                    break;
-                case MAC:
-                    break;
-                default:
-                    // Linux System Tray support is abysmal, always use TaskbarTrayIcon
-                    return false;
+            if (getOs() == Os.WINDOWS && WindowsUtilities.isHiddenSystemTray()) {
+                return false;
             }
             return SystemTray.isSupported();
         }

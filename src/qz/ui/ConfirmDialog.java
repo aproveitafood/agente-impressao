@@ -44,12 +44,12 @@ public class ConfirmDialog extends JDialog {
         descriptionPanel.add(questionLabel);
         descriptionPanel.add(messageLabel);
         descriptionPanel.setBorder(new EmptyBorder(3, 3, 3, 3));
-        messageLabel.setText("Are you sure?");
+        messageLabel.setText("Tem certeza?");
 
         optionsPanel = new JPanel();
-        yesButton = new JButton("OK", iconCache.getIcon(IconCache.Icon.ALLOW_ICON));
-        yesButton.setMnemonic(KeyEvent.VK_K);
-        noButton = new JButton("Cancel", iconCache.getIcon(IconCache.Icon.CANCEL_ICON));
+        yesButton = new JButton("Confirmar", iconCache.getIcon(IconCache.Icon.ALLOW_ICON));
+        yesButton.setMnemonic(KeyEvent.VK_F);
+        noButton = new JButton("Cancelar", iconCache.getIcon(IconCache.Icon.CANCEL_ICON));
         noButton.setMnemonic(KeyEvent.VK_C);
         yesButton.addActionListener(buttonAction);
         noButton.addActionListener(buttonAction);
@@ -107,4 +107,3 @@ public class ConfirmDialog extends JDialog {
         return isApproved();
     }
 }
-

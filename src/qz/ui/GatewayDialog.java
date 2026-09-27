@@ -38,9 +38,9 @@ public class GatewayDialog extends HeadlessDialog implements Themeable {
     private static final Logger log = LogManager.getLogger(GatewayDialog.class);
 
     // Main dialog
-    private static final String BUTTON_ALLOW = "Allow";
-    private static final String BUTTON_BLOCK = "Block";
-    private static final String LINK_REQUEST_DETAILS = "View request details";
+    private static final String BUTTON_ALLOW = "Autorizar";
+    private static final String BUTTON_BLOCK = "Bloquear";
+    private static final String LINK_REQUEST_DETAILS = "Ver detalhes da solicitação";
     private static final String CHECKBOX_REMEMBER = Constants.REMEMBER_THIS_DECISION;
 
     private final JDialog dialog;
@@ -59,11 +59,11 @@ public class GatewayDialog extends HeadlessDialog implements Themeable {
     private Response response;
 
     // Confirm dialog
-    private static final String CONFIRM_BLOCK_TITLE = "Confirm";
+    private static final String CONFIRM_BLOCK_TITLE = "Confirmar bloqueio";
     private String confirmBlockText;
 
     // Details dialog
-    private static final String DETAILS_DIALOG_TITLE = "Details";
+    private static final String DETAILS_DIALOG_TITLE = "Detalhes";
     private JLabel verifiedLabel;
     private JLabel descriptionLabel;
     private LinkLabel certInfoLabel;
@@ -75,7 +75,7 @@ public class GatewayDialog extends HeadlessDialog implements Themeable {
         this.title = title;
         this.headless = headless;
         this.iconCache = iconCache;
-        this.description = "Description missing";
+        this.description = "Descrição indisponível";
         this.response = Response.UNANSWERED;
         this.dialog = headless ? null : new JDialog(owner, title, true);
         this.confirmDialog = headless ? null : new ConfirmDialog(null, CONFIRM_BLOCK_TITLE, iconCache);
@@ -205,9 +205,8 @@ public class GatewayDialog extends HeadlessDialog implements Themeable {
         this.detailColor = request.isVerified() ? Constants.TRUSTED_COLOR : Constants.WARNING_COLOR;
 
         // Block confirmation dialog
-        this.confirmBlockText = String.format(Constants.BLOCK_SITES_TEXT.replace(" blocked ", " block ") + "?",
-                                              request.hasCertificate() ?
-                                                              request.getCertName() : "");
+        this.confirmBlockText = String.format("Deseja bloquear permanentemente o acesso a recursos locais para \"%s\"?",
+                                              request.hasCertificate() ? request.getCertName() : "");
 
         if(headless) {
             try {
@@ -380,4 +379,3 @@ public class GatewayDialog extends HeadlessDialog implements Themeable {
     }
 
 }
-

@@ -15,7 +15,7 @@ public class TaskbarTrayIcon extends JFrame implements WindowListener {
     private JPopupMenu popup;
 
     public TaskbarTrayIcon(Image trayImage, final ActionListener exitListener) {
-        super(Constants.ABOUT_TITLE);
+        super(Constants.APP_DISPLAY_NAME);
         initializeComponents(trayImage, exitListener);
     }
 
