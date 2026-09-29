@@ -97,11 +97,9 @@ jobs:
         run: ant nsis
 
       - name: Assinar com SignPath (gratuito para OSS)
-        # Só roda em push de tag e quando os secrets estão configurados
-        if: >
-          startsWith(github.ref, 'refs/tags/v') &&
-          secrets.SIGNPATH_API_TOKEN != '' &&
-          secrets.SIGNPATH_ORG_ID != ''
+        # Só roda em push de tag e quando os secrets estão configurados.
+        # Usa input-artifact-path para assinar arquivos locais diretamente.
+        if: startsWith(github.ref, 'refs/tags/v') && secrets.SIGNPATH_API_TOKEN != '' && secrets.SIGNPATH_ORG_ID != ''
         uses: signpath/github-action-submit-signing-request@v1
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
@@ -109,19 +107,19 @@ jobs:
           project-slug: agente-impressao
           signing-policy-slug: release-signing
           artifact-configuration-slug: exe
-          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
-          wait-for-completion: true
+          input-artifact-path: out/dist/
           output-artifact-directory: out/dist/signed/
-        id: signpath
+          wait-for-completion: true
 
       - name: Upload artefato (assinado ou não)
         uses: actions/upload-artifact@v4
         with:
           name: windows-installer
-          # Se SignPath rodou, usa o arquivo assinado; senão, o original
+          # Se SignPath rodou, o .exe assinado fica em signed/; senão, usa o original
           path: |
             out/dist/signed/*.exe
             out/dist/*.exe
+          if-no-files-found: warn
           retention-days: 1
 
   # ───────────────────────────────────────────────────────────────────────────
