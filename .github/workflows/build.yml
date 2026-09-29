@@ -169,8 +169,10 @@ jobs:
           distribution: ${{ env.JAVA_DISTRIBUTION }}
           java-version: ${{ env.JAVA_VERSION }}
 
-      - name: Instalar Ant
-        run: brew install ant
+      - name: Instalar Ant, convmv e appdmg
+        run: |
+          brew install ant convmv
+          npm install -g appdmg
 
       # ── Descomente quando tiver Apple Developer ID ──────────────────────
       # - name: Import Apple certificates
