@@ -11,12 +11,12 @@ código e nos testes correspondentes.
 | --- | --- |
 | [Arquitetura](arquitetura.md) | Componentes Java e fluxo de inicialização, conexão e impressão |
 | [Desenvolvimento](desenvolvimento.md) | Pré-requisitos, build Ant, execução e testes |
-| [Impressão e integração](impressao-e-integracao.md) | Protocolos de impressão, cliente JS e dispositivos |
+| [Impressão e integração](impressao-e-integracao.md) | Como o frontend se comunica com o agente, exemplos JS completos |
 | [Configuração e segurança](configuracao-e-seguranca.md) | Preferências, portas, diretórios, certificados e limites |
 | [Interface e identidade](interface-e-identidade.md) | Marca, fontes, paleta, recursos e comportamento de bandeja |
 | [Operação e diagnóstico](operacao-e-diagnostico.md) | Logs, execução local e diagnóstico de problemas |
 | [Regras, decisões e glossário](regras-e-decisoes.md) | Princípios do projeto e definições usadas na documentação |
-| [Teste com impressora emulada](teste-impressora-emulada.md) | Docker ESC/POS emulator para testes manuais e automatizados |
+| [Teste com impressora emulada](teste-impressora-emulada.md) | Docker ESC/POS emulator — passo a passo, código pronto, troubleshooting |
 
 As instruções para contribuições automatizadas e assistidas por agentes estão
 em [`../AGENTS.md`](../AGENTS.md).

@@ -53,6 +53,22 @@ O servidor local publica o endpoint de informações em
 alterar portas e interfaces de rede. Não exponha o serviço a outras máquinas
 sem revisar as definições de segurança.
 
+## Testar sem hardware
+
+O repositório inclui um `docker-compose.yml` com emulador ESC/POS para testar
+o fluxo completo sem impressora física:
+
+```bash
+docker compose up -d          # sobe o emulador
+java -jar out/dist/agente-impressao.jar  # sobe o agente
+# abra a página cliente no browser, conecte, imprima
+# veja o resultado em http://localhost:3000
+docker compose down           # para o emulador
+```
+
+Veja o guia completo com exemplos de código em
+[Teste com impressora emulada](docs/teste-impressora-emulada.md).
+
 ## Validar alterações
 
 ```bash

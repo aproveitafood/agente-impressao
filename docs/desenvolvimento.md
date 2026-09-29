@@ -30,10 +30,10 @@ Limpeza dos artefatos em `out/` e build limpo:
 ant clean build-jar
 ```
 
-O JAR executável é gerado em `out/dist/qz-tray.jar`. Execute-o com:
+O JAR executável é gerado em `out/dist/agente-impressao.jar`. Execute-o com:
 
 ```bash
-java -jar out/dist/qz-tray.jar
+java -jar out/dist/agente-impressao.jar
 ```
 
 O processo deve continuar ativo para manter os serviços WebSocket disponíveis.

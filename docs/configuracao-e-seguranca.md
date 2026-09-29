@@ -37,16 +37,17 @@ firewall nem autenticação. Revise `security.wss.httpsonly` e
 
 ## Arquivos de usuário e preferências
 
-O nome do diretório de dados é `qz`, definido em `Constants.DATA_DIR`.
+O nome do diretório de dados é `agente-impressao`, definido em `Constants.DATA_DIR`.
 
 | Sistema | Diretório de usuário esperado |
 | --- | --- |
-| Linux/Unix | `~/.qz/` |
-| macOS | `~/Library/Application Support/qz/` |
-| Windows | Diretório Roaming do usuário, subdiretório `qz` |
+| Linux/Unix | `~/.agente-impressao/` |
+| macOS | `~/Library/Application Support/agente-impressao/` |
+| Windows | Diretório Roaming do usuário, subdiretório `agente-impressao` |
 
-O diretório compartilhado usa `/srv/qz/` no Linux/Unix,
-`/Library/Application Support/qz/` no macOS e `ProgramData/qz/` no Windows.
+O diretório compartilhado usa `/srv/agente-impressao/` no Linux/Unix,
+`/Library/Application Support/agente-impressao/` no macOS e
+`ProgramData/agente-impressao/` no Windows.
 `FileUtilities` é a fonte de verdade para caminhos e fallbacks específicos.
 
 Arquivos de preferências e operação incluem `prefs.properties`,
