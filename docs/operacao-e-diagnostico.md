@@ -7,7 +7,7 @@ Compile e execute:
 ```bash
 export JAVA_HOME=/usr/lib/jvm/java-25-openjdk-amd64
 ant clean build-jar
-java -jar out/dist/qz-tray.jar
+java -jar out/dist/agente-impressao.jar
 ```
 
 O processo permanece ativo em segundo plano e publica HTTP/WebSocket local.
