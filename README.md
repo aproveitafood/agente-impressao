@@ -12,7 +12,7 @@
   <a href="https://github.com/aproveitafood/agente-impressao/releases/latest">
     <img src="https://img.shields.io/github/v/release/aproveitafood/agente-impressao?label=download&color=1a1a1a" alt="Download" />
   </a>
-  <img src="https://img.shields.io/badge/plataformas-Windows%20%7C%20macOS%20%7C%20Linux-1a1a1a" alt="Plataformas" />
+  <img src="https://img.shields.io/badge/plataformas-Windows%20%7C%20Linux-1a1a1a" alt="Plataformas" />
   <img src="https://img.shields.io/badge/java-25-1a1a1a" alt="Java 25" />
 </p>
 
@@ -23,7 +23,7 @@ disponíveis na máquina. Ele mantém um serviço local para comunicação com o
 cliente JavaScript, gerencia certificados e permissões e oferece uma interface
 pela bandeja do sistema.
 
-Aplicativo Java para desktop, desenvolvido internamente pelo Aproveita Food.
+Desenvolvido internamente pelo Aproveita Food.
 A licença e os avisos de terceiros continuam aplicáveis; consulte [`LICENSE.txt`](LICENSE.txt).
 
 ## Download
@@ -32,12 +32,10 @@ Baixe o instalador para sua plataforma na [página de releases](https://github.c
 
 | Plataforma | Arquivo |
 |---|---|
-| Windows | `agente-impressao-x.x.x-windows-x64.exe` |
-| macOS (Apple Silicon) | `agente-impressao-x.x.x-macos-aarch64.pkg` |
-| macOS (Intel) | `agente-impressao-x.x.x-macos-x64.pkg` |
-| Linux | `agente-impressao-x.x.x-linux-x64.run` |
+| Windows | `agente-impressao-x.x.x-x86_64.exe` |
+| Linux | `agente-impressao-x.x.x-x86_64.run` |
 
-> **macOS:** o instalador é ad-hoc assinado. Na primeira execução, clique com botão direito no arquivo e escolha "Abrir" para contornar o Gatekeeper.
+> **macOS:** suporte planejado para versão futura.
 
 ## Executar localmente
 
@@ -47,7 +45,7 @@ dependências Ivy.
 ```bash
 export JAVA_HOME=/usr/lib/jvm/java-25-openjdk-amd64
 ant clean build-jar
-java -jar out/dist/qz-tray.jar
+java -jar out/dist/agente-impressao.jar
 ```
 
 O servidor local publica o endpoint de informações em
