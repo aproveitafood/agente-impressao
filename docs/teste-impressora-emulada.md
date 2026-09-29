@@ -7,7 +7,9 @@ O que foi "impresso" aparece em painel web em tempo real.
 
 - Docker e Docker Compose instalados
 - JDK 25 instalado (`/usr/lib/jvm/java-25-openjdk-amd64` no Linux)
-- JAR do agente compilado (`ant clean build-jar`)
+- JAR do agente compilado (`ant clean build-jar`) ou instalador da release
+- Linux: pacote `cups-bsd` (fornece `/usr/bin/lpr`, usado pelo agente para
+  enviar a impressão à fila do sistema)
 
 ## Passo a passo completo
 
@@ -125,6 +127,28 @@ qz.print(config, [{
 Após `qz.print()` resolver, acesse http://localhost:3000 para ver o cupom
 renderizado.
 
+### 6b. Pelo fluxo real do Aproveita (fila CUPS)
+
+O frontend do Aproveita não imprime por host/porta: com `connectionType=PRINTER`
+ele chama `qz.configs.create(qzPrinterName)`, ou seja, uma impressora do
+sistema pelo nome. Para usar o emulador nesse fluxo, crie uma fila CUPS local
+apontando para o socket (Linux; o usuário precisa estar no grupo `lpadmin`):
+
+```bash
+/usr/sbin/lpadmin -p Aproveita_Emulada -E -v socket://127.0.0.1:9100 -m raw \
+  -o printer-is-shared=false
+printf '\x1b@SMOKE CUPS\n\n\n\x1dVA\x00' | lp -d Aproveita_Emulada -o raw
+```
+
+O aviso `Raw queues are deprecated` do CUPS 2.4 é esperado; a fila funciona.
+No Aproveita, em **Impressão e som**, cadastre a impressora com
+"Buscar neste computador" → `Aproveita_Emulada`. O botão **Imprimir** do
+pedido e a impressão automática passam a sair no painel `:3000`.
+
+Validado em 29/09/2026 (Debian 13, agente v2.4.0, frontend `57deb20`):
+página de teste, botão Imprimir e impressão automática renderizados no
+emulador. Para remover a fila: `/usr/sbin/lpadmin -x Aproveita_Emulada`.
+
 ### 7. Parar o emulador
 
 ```bash
@@ -150,3 +174,4 @@ browser (JS)
 | Conexão recusada | Porta errada ou firewall | Verifique `ws://localhost:8182` |
 | Impressão não aparece em :3000 | Emulador parado | `docker compose up -d` |
 | "Autorizar" desabilitado com "Lembrar" | Comportamento normal para modo anônimo | Desmarque "Lembrar" e clique Autorizar |
+| `Cannot run program "/usr/bin/lpr"` | Falta o pacote `cups-bsd` (Linux) | `sudo apt install cups-bsd` |

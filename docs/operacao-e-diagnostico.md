@@ -68,6 +68,7 @@ por `TrayMenuPlacement.topLeft`, com 4px de folga do ícone.
 | O menu some sozinho ao passar o mouse | Build novo, filtro de ativação da bandeja e ausência de minimização inesperada no log |
 | O menu muda de lugar ao clicar em uma linha | Âncora do ícone preservada durante o `pack()` e logs `Menu shown, anchored to` |
 | Impressora não aparece | Driver, CUPS/serviço nativo, permissões e logs de descoberta |
+| Impressão falha no Linux com `Cannot run program "/usr/bin/lpr"` | Pacote `cups-bsd` ausente. O `.deb` o declara como dependência; com o `.run`, instale com `sudo apt install cups-bsd`. O instalador avisa no log: `"/usr/bin/lpr" wasn't found` |
 | O diálogo de autorização não aparece | Modo headless, endpoint configurado para diálogos e estado do certificado |
 | Fontes/logos não aparecem após a alteração | Build novo, recurso presente no JAR e caminho de recurso correto |
 
