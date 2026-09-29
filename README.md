@@ -23,9 +23,8 @@ disponíveis na máquina. Ele mantém um serviço local para comunicação com o
 cliente JavaScript, gerencia certificados e permissões e oferece uma interface
 pela bandeja do sistema.
 
-Este repositório contém um fork Java baseado no QZ Tray 2.3.0, adaptado para a
-identidade e a operação do Aproveita Food. A licença e os avisos de terceiros
-continuam aplicáveis; consulte [`LICENSE.txt`](LICENSE.txt).
+Aplicativo Java para desktop, desenvolvido internamente pelo Aproveita Food.
+A licença e os avisos de terceiros continuam aplicáveis; consulte [`LICENSE.txt`](LICENSE.txt).
 
 ## Download
 
@@ -79,8 +78,7 @@ antes de escolher a validação adequada.
 - [Regras, decisões e glossário](docs/regras-e-decisoes.md)
 - [Instruções para agentes](AGENTS.md)
 
-## Licença e origem
+## Licença
 
-O projeto mantém código e componentes derivados do QZ Tray. Preserve os avisos
-de copyright, a licença LGPL 2.1 e os termos das dependências ao modificar,
-empacotar ou distribuir o aplicativo.
+Preserve os avisos de copyright, a licença LGPL 2.1 e os termos das dependências
+ao modificar, empacotar ou distribuir o aplicativo.

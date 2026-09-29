@@ -12,7 +12,7 @@
 
 ## Princípios do produto
 
-- Este é o agente desktop de impressão do Aproveita Food, baseado no QZ Tray.
+- Este é o agente desktop de impressão do Aproveita Food.
 - Preserve os contratos usados pelo cliente JavaScript, o protocolo WebSocket,
   os fluxos de impressão, a validação de certificados e as permissões existentes.
   Mudanças nesses contratos ou controles de segurança exigem justificativa,

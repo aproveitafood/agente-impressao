@@ -4,7 +4,7 @@
 
 O agente disponibiliza uma ponte local para que um cliente autorizado solicite
 operações com impressoras e dispositivos acessíveis ao computador. A API é
-consumida por cliente JavaScript compatível com o protocolo QZ Tray; o exemplo
+consumida por cliente JavaScript compatível com o protocolo WebSocket do agente; o exemplo
 versionado em `js/README.md` ilustra conexão, descoberta de impressoras e envio
 de um trabalho.
 
