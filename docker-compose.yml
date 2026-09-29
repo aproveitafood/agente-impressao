@@ -1,0 +1,8 @@
+services:
+  impressora-emulada:
+    image: ghcr.io/lezram/escpos-emulator:latest
+    container_name: impressora-emulada
+    ports:
+      - "9100:9100"   # ESC/POS raw socket — aponta o agente para 127.0.0.1:9100
+      - "3000:3000"   # Web UI — http://localhost:3000
+    restart: unless-stopped

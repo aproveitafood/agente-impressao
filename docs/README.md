@@ -16,6 +16,7 @@ código e nos testes correspondentes.
 | [Interface e identidade](interface-e-identidade.md) | Marca, fontes, paleta, recursos e comportamento de bandeja |
 | [Operação e diagnóstico](operacao-e-diagnostico.md) | Logs, execução local e diagnóstico de problemas |
 | [Regras, decisões e glossário](regras-e-decisoes.md) | Princípios do projeto e definições usadas na documentação |
+| [Teste com impressora emulada](teste-impressora-emulada.md) | Docker ESC/POS emulator para testes manuais e automatizados |
 
 As instruções para contribuições automatizadas e assistidas por agentes estão
 em [`../AGENTS.md`](../AGENTS.md).
