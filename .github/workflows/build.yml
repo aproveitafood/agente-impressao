@@ -159,6 +159,7 @@ jobs:
   build-macos:
     name: macOS (pkg + dmg, ad-hoc)
     runs-on: macos-latest
+    if: false  # desabilitado — dependências appdmg/convmv pendentes; reativar quando macOS for prioridade
 
     steps:
       - uses: actions/checkout@v4
@@ -223,7 +224,7 @@ jobs:
   # ───────────────────────────────────────────────────────────────────────────
   release:
     name: Publicar Release
-    needs: [build-linux, build-windows, build-macos]
+    needs: [build-linux, build-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
 
