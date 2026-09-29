@@ -23,30 +23,30 @@ public class Constants {
     public static final String ALLOW_FILE = "allowed";
     public static final String TEMP_FILE = "temp";
     public static final String LOG_FILE = "debug";
-    public static final String PROPS_FILE = "qz-tray"; // .properties extension is assumed
+    public static final String PROPS_FILE = "agente-impressao"; // .properties extension is assumed
     public static final String PREFS_FILE = "prefs"; // .properties extension is assumed
     public static final String[] PERSIST_PROPS = {"file.whitelist", "file.allow", "networking.hostname", "networking.port", STEAL_WEBSOCKET_PROPERTY };
     public static final String AUTOSTART_FILE = ".autostart";
-    public static final String DATA_DIR = "qz";
+    public static final String DATA_DIR = "agente-impressao";
 
     public static final int BORDER_PADDING = 10;
 
-    public static final String ABOUT_TITLE = "QZ Tray";
+    public static final String ABOUT_TITLE = "Agente de Impressao";
     public static final String APP_DISPLAY_NAME = "Aproveita Food";
-    public static final String ABOUT_EMAIL = "support@qz.io";
-    public static final String ABOUT_URL = "https://qz.io";
-    public static final String ABOUT_COMPANY = "QZ Industries, LLC";
-    public static final String ABOUT_CITY = "Canastota";
-    public static final String ABOUT_STATE = "NY";
-    public static final String ABOUT_COUNTRY = "US";
+    public static final String ABOUT_EMAIL = "contato@aproveitafood.com.br";
+    public static final String ABOUT_URL = "https://github.com/aproveitafood/agente-impressao";
+    public static final String ABOUT_COMPANY = "Aproveita Food";
+    public static final String ABOUT_CITY = "";
+    public static final String ABOUT_STATE = "";
+    public static final String ABOUT_COUNTRY = "BR";
 
-    public static final String ABOUT_LICENSING_URL = Constants.ABOUT_URL + "/licensing";
-    public static final String ABOUT_SUPPORT_URL = Constants.ABOUT_URL + "/support";
-    public static final String ABOUT_PRIVACY_URL = Constants.ABOUT_URL + "/privacy";
-    public static final String ABOUT_DOWNLOAD_URL = Constants.ABOUT_URL + "/download";
+    public static final String ABOUT_LICENSING_URL = Constants.ABOUT_URL + "/blob/master/LICENSE.txt";
+    public static final String ABOUT_SUPPORT_URL = Constants.ABOUT_URL + "/issues";
+    public static final String ABOUT_PRIVACY_URL = Constants.ABOUT_URL;
+    public static final String ABOUT_DOWNLOAD_URL = Constants.ABOUT_URL + "/releases/latest";
 
-    public static final String VERSION_CHECK_URL = "https://api.github.com/repos/qzind/tray/releases";
-    public static final String VERSION_DOWNLOAD_URL = "https://github.com/qzind/tray/releases";
+    public static final String VERSION_CHECK_URL = "https://api.github.com/repos/aproveitafood/agente-impressao/releases";
+    public static final String VERSION_DOWNLOAD_URL = "https://github.com/aproveitafood/agente-impressao/releases";
     public static final boolean ENABLE_DIAGNOSTICS = true; // Diagnostics menu (logs, etc)
 
     public static final String BRAND_COLOR_HEX = "#BC361C";

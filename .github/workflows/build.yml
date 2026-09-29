@@ -43,6 +43,15 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y ant makeself
 
+      - name: Atualizar versão no código (usa tag git)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          sed -i "s/Version\.valueOf(\"[^\"]*\")/Version.valueOf(\"${VERSION}\")/" \
+            src/qz/common/Constants.java
+          echo "Versão definida: ${VERSION}"
+
       - name: Build instalador Linux
         run: ant makeself
 
@@ -101,6 +110,16 @@ jobs:
 
       - name: Instalar Ant e NSIS
         run: choco install ant nsis --no-progress -y
+
+      - name: Atualizar versão no código (usa tag git)
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          sed -i "s/Version\.valueOf(\"[^\"]*\")/Version.valueOf(\"${VERSION}\")/" \
+            src/qz/common/Constants.java
+          echo "Versão definida: ${VERSION}"
 
       - name: Build instalador Windows
         run: ant nsis
