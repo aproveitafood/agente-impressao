@@ -58,8 +58,12 @@ jobs:
 
       - name: Build instalador .deb
         run: |
-          VERSION="${{ github.ref_name }}"
-          VERSION="${VERSION#v}"
+          # Só tag v* define a versão; em PR o ref_name é "N/merge" (inválido para o dpkg)
+          VERSION=""
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${{ github.ref_name }}"
+            VERSION="${VERSION#v}"
+          fi
           # Em PRs não há tag; usa a versão do Constants.java
           if [ -z "$VERSION" ]; then
             VERSION=$(grep -oP 'Version\.valueOf\("\K[^"]+' src/qz/common/Constants.java)
