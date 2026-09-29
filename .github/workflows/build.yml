@@ -1,0 +1,230 @@
+name: Build & Release
+
+# Dispara em PRs (apenas build + test) e em push de tag v* (build + release).
+on:
+  push:
+    tags:
+      - "v*"
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: write   # necessário para criar releases e fazer upload de assets
+  id-token: write   # necessário para SignPath OIDC
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Variáveis compartilhadas
+# ─────────────────────────────────────────────────────────────────────────────
+env:
+  JAVA_VERSION: "25"
+  JAVA_DISTRIBUTION: liberica
+  ANT_OPTS: "-Djlink.api.enabled=false -Xmx1g"
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────────
+  # Linux — makeself .run  +  GPG detach-sign
+  # ───────────────────────────────────────────────────────────────────────────
+  build-linux:
+    name: Linux (makeself)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Install Ant e makeself
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y ant makeself
+
+      - name: Build instalador Linux
+        run: ant makeself
+
+      - name: Assinar com GPG (opcional — só se o secret existir)
+        if: ${{ secrets.GPG_PRIVATE_KEY != '' }}
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          for f in out/dist/*.run; do
+            gpg --batch --yes --passphrase "$GPG_PASSPHRASE" \
+                --armor --detach-sign "$f"
+          done
+
+      - name: Upload artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-installer
+          path: |
+            out/dist/*.run
+            out/dist/*.run.asc
+          retention-days: 1
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Windows — NSIS .exe  +  SignPath (gratuito para OSS)
+  #
+  # Pré-requisito: registrar em https://signpath.io/product/open-source e
+  # configurar os secrets abaixo no repositório GitHub:
+  #   SIGNPATH_API_TOKEN       — token gerado no painel SignPath
+  #   SIGNPATH_ORG_ID          — ID da organização no SignPath
+  # Enquanto os secrets não estiverem configurados, o step de assinatura
+  # é ignorado e o .exe é distribuído sem assinatura (SmartScreen avisa).
+  # ───────────────────────────────────────────────────────────────────────────
+  build-windows:
+    name: Windows (NSIS + SignPath)
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Instalar Ant e NSIS
+        run: choco install ant nsis --no-progress -y
+
+      - name: Build instalador Windows
+        run: ant nsis
+
+      - name: Assinar com SignPath (gratuito para OSS)
+        # Só roda em push de tag e quando os secrets estão configurados
+        if: >
+          startsWith(github.ref, 'refs/tags/v') &&
+          secrets.SIGNPATH_API_TOKEN != '' &&
+          secrets.SIGNPATH_ORG_ID != ''
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORG_ID }}
+          project-slug: agente-impressao
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: exe
+          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: out/dist/signed/
+        id: signpath
+
+      - name: Upload artefato (assinado ou não)
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          # Se SignPath rodou, usa o arquivo assinado; senão, o original
+          path: |
+            out/dist/signed/*.exe
+            out/dist/*.exe
+          retention-days: 1
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # macOS — .pkg + .dmg  +  assinatura ad-hoc (gratuita)
+  #
+  # Assinatura com Developer ID Application requer Apple Developer Program
+  # (USD 99/ano). Por enquanto, usa codesign ad-hoc ("-") que é gratuito.
+  # O Gatekeeper vai exibir aviso na primeira execução; usuário deve usar
+  # botão direito > "Abrir" para contornar.
+  #
+  # Para ativar assinatura real no futuro, configure:
+  #   APPLE_CERT_DATA          — base64 do .p12 (Developer ID Application)
+  #   APPLE_CERT_PASSWORD      — senha do .p12
+  #   APPLE_TEAM_ID            — Team ID da Apple Developer Account
+  #   APPLE_ID                 — e-mail da Apple ID
+  #   APPLE_ID_PASSWORD        — app-specific password
+  # e descomente os steps "Import Apple certificates" e "Notarize" abaixo.
+  # ───────────────────────────────────────────────────────────────────────────
+  build-macos:
+    name: macOS (pkg + dmg, ad-hoc)
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Instalar Ant
+        run: brew install ant
+
+      # ── Descomente quando tiver Apple Developer ID ──────────────────────
+      # - name: Import Apple certificates
+      #   env:
+      #     APPLE_CERT_DATA: ${{ secrets.APPLE_CERT_DATA }}
+      #     APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+      #     APPLE_KEYCHAIN_PASSWORD: tmp_keychain_pw
+      #   run: |
+      #     KEYCHAIN=$RUNNER_TEMP/signing.keychain-db
+      #     echo -n "$APPLE_CERT_DATA" | base64 --decode -o /tmp/cert.p12
+      #     security create-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+      #     security set-keychain-settings -lut 21600 "$KEYCHAIN"
+      #     security unlock-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+      #     security import /tmp/cert.p12 -P "$APPLE_CERT_PASSWORD" \
+      #       -A -t cert -f pkcs12 -k "$KEYCHAIN"
+      #     security list-keychain -d user -s "$KEYCHAIN"
+      # ────────────────────────────────────────────────────────────────────
+
+      - name: Build pkg (ad-hoc)
+        run: ant pkgbuild
+
+      - name: Build dmg (ad-hoc)
+        run: ant dmg
+
+      # ── Descomente quando tiver Apple Developer ID ──────────────────────
+      # - name: Notarize pkg
+      #   run: |
+      #     xcrun notarytool submit out/dist/*.pkg \
+      #       --apple-id      "${{ secrets.APPLE_ID }}" \
+      #       --password      "${{ secrets.APPLE_ID_PASSWORD }}" \
+      #       --team-id       "${{ secrets.APPLE_TEAM_ID }}" \
+      #       --wait
+      #     xcrun stapler staple out/dist/*.pkg
+      # ────────────────────────────────────────────────────────────────────
+
+      - name: Upload artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-installer
+          path: |
+            out/dist/*.pkg
+            out/dist/*.dmg
+          retention-days: 1
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Release — só em push de tag v*
+  # Coleta artefatos dos três builds e cria o GitHub Release.
+  # ───────────────────────────────────────────────────────────────────────────
+  release:
+    name: Publicar Release
+    needs: [build-linux, build-windows, build-macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Download todos os artefatos
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Listar artefatos coletados
+        run: find artifacts/ -type f | sort
+
+      - name: Criar GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          generate_release_notes: true
+          draft: false
+          # Tags com sufixo -rc, -beta ou -alpha ficam como pré-release
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
