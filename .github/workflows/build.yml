@@ -47,11 +47,15 @@ jobs:
         run: ant makeself
 
       - name: Assinar com GPG (opcional — só se o secret existir)
-        if: ${{ secrets.GPG_PRIVATE_KEY != '' }}
+        # secrets não pode aparecer em if:; passamos via env e checamos no shell
         env:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
+          if [ -z "$GPG_PRIVATE_KEY" ]; then
+            echo "GPG_PRIVATE_KEY não configurado — pulando assinatura GPG"
+            exit 0
+          fi
           echo "$GPG_PRIVATE_KEY" | gpg --batch --import
           for f in out/dist/*.run; do
             gpg --batch --yes --passphrase "$GPG_PASSPHRASE" \
@@ -96,10 +100,24 @@ jobs:
       - name: Build instalador Windows
         run: ant nsis
 
+      - name: Verificar secrets SignPath
+        id: signpath-check
+        # secrets não pode aparecer em if:; checamos via env no shell
+        shell: bash
+        env:
+          SP_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SP_ORG: ${{ secrets.SIGNPATH_ORG_ID }}
+        run: |
+          if [[ -n "$SP_TOKEN" && -n "$SP_ORG" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Assinar com SignPath (gratuito para OSS)
         # Só roda em push de tag e quando os secrets estão configurados.
         # Usa input-artifact-path para assinar arquivos locais diretamente.
-        if: startsWith(github.ref, 'refs/tags/v') && secrets.SIGNPATH_API_TOKEN != '' && secrets.SIGNPATH_ORG_ID != ''
+        if: startsWith(github.ref, 'refs/tags/v') && steps.signpath-check.outputs.available == 'true'
         uses: signpath/github-action-submit-signing-request@v1
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
