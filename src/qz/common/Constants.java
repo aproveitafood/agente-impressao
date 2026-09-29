@@ -53,6 +53,15 @@ public class Constants {
     public static final Color BRAND_PRIMARY_COLOR = Color.decode(BRAND_COLOR_HEX);
     public static final Color BRAND_SUCCESS_COLOR = Color.decode("#6E8B4A");
     public static final Color BRAND_DANGER_COLOR = Color.decode("#D84A2B");
+
+    // Brand surface, mirrored from ../frontend/src/styles/tokens.css.  The tray menu always uses
+    // these, because it is a branded surface and must not follow the desktop's prefer-dark.
+    public static final Color BRAND_CREAM_COLOR = Color.decode("#FFF3E7");
+    public static final Color BRAND_CREAM_LIGHT_COLOR = Color.decode("#FFFAF4");
+    public static final Color BRAND_CARD_COLOR = Color.decode("#FFFFFF");
+    public static final Color BRAND_COCOA_COLOR = Color.decode("#4A2B1F");
+    public static final Color BRAND_MUTED_COLOR = Color.decode("#765F55");
+    public static final Color BRAND_BORDER_COLOR = Color.decode("#E8D9CC");
     @SuppressWarnings("ConstantValue")
     public static final boolean IS_REBRANDED = !ABOUT_EMAIL.equals("support@qz.io");
 

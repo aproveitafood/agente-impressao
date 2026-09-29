@@ -32,6 +32,8 @@ import qz.ws.WebsocketPorts;
 import qz.ws.substitutions.Substitutions;
 
 import javax.swing.*;
+import javax.swing.event.PopupMenuEvent;
+import javax.swing.event.PopupMenuListener;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -212,10 +214,54 @@ public class TrayManager {
                 if (c instanceof JDialog) {
                     ((JDialog)c).pack();
                 } else if (c instanceof JPopupMenu) {
+                    styleTrayPopup((JPopupMenu)c);
                     ((JPopupMenu)c).pack();
                 }
             }
         });
+    }
+
+    private void styleTrayPopup(JPopupMenu popup) {
+        // The tray menu is a branded surface: cream background, never the desktop's dark palette
+        popup.setBackground(Constants.BRAND_CREAM_COLOR);
+        popup.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(Constants.BRAND_BORDER_COLOR),
+                BorderFactory.createEmptyBorder(8, 8, 8, 8)));
+
+        if (popup.getComponentCount() > 0 && popup.getComponent(0) instanceof JPanel) {
+            popup.getComponent(0).setBackground(popup.getBackground());
+        }
+        styleTrayRows(popup);
+    }
+
+    public static void styleTrayRows(Container container) {
+        for (Component component : container.getComponents()) {
+            if (component instanceof AbstractButton) {
+                styleTrayRow((AbstractButton)component);
+            }
+            if (component instanceof Container) {
+                styleTrayRows((Container)component);
+            }
+        }
+    }
+
+    /**
+     * Applies the tray row colors: a white row on the cream surface, so each row is distinguishable
+     * from the panel behind it, with cocoa text.
+     *
+     * <p>Public and static because {@link qz.ui.tray.TaskbarTrayIcon} re-applies the same rules when
+     * the menu opens and closes; the tray menu is never shown as a {@link JPopupMenu} in MODERN and
+     * TASKBAR modes, so the popup listener alone is not enough to restore the rows.
+     *
+     * <p>Opacity is left untouched on purpose: forcing it opaque would drop the look-and-feel's
+     * rounded corners and focus ring.
+     */
+    public static void styleTrayRow(AbstractButton item) {
+        item.setBackground(Constants.BRAND_CARD_COLOR);
+        item.setForeground(Constants.BRAND_COCOA_COLOR);
+        ThemeUtilities.applyBrandHover(item, Constants.BRAND_COCOA_COLOR, Constants.BRAND_CARD_COLOR,
+                                       Constants.BRAND_COCOA_COLOR,
+                                       ThemeUtilities.mix(Constants.BRAND_CARD_COLOR, Constants.BRAND_PRIMARY_COLOR, 0.12f));
     }
 
     /**
@@ -228,15 +274,63 @@ public class TrayManager {
     }
 
     /**
-     * Builds the swing pop-up menu with the specified items
+     * Builds the Swing pop-up menu with the specified items.
      */
     private void addMenuItems() {
         JPopupMenu popup = new JPopupMenu();
         componentList.add(popup);
 
-        JMenu advancedMenu = new JMenu("Avançado");
-        advancedMenu.setMnemonic(KeyEvent.VK_A);
-        advancedMenu.setIcon(iconCache.getIcon(SETTINGS_ICON));
+        JPanel menuContent = new JPanel();
+        menuContent.setLayout(new BoxLayout(menuContent, BoxLayout.Y_AXIS));
+        componentList.add(menuContent);
+
+        JPanel brandHeader = new JPanel();
+        brandHeader.setLayout(new BoxLayout(brandHeader, BoxLayout.Y_AXIS));
+        brandHeader.setOpaque(false);
+        brandHeader.setBackground(Constants.BRAND_CREAM_COLOR);
+        brandHeader.setBorder(BorderFactory.createEmptyBorder(8, 12, 10, 12));
+        brandHeader.setAlignmentX(Component.LEFT_ALIGNMENT);
+        brandHeader.setMaximumSize(new Dimension(280, Integer.MAX_VALUE));
+        JPanel menuActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        menuActions.setOpaque(false);
+        menuActions.setMaximumSize(new Dimension(280, 30));
+        JButton minimizeButton = new JButton(iconCache.getIcon(MINIMIZE_ICON));
+        minimizeButton.setName("tray-minimize");
+        minimizeButton.setToolTipText("Minimizar menu");
+        minimizeButton.getAccessibleContext().setAccessibleName("Minimizar menu");
+        minimizeButton.setPreferredSize(new Dimension(30, 26));
+        minimizeButton.setMinimumSize(new Dimension(30, 26));
+        minimizeButton.setMaximumSize(new Dimension(30, 26));
+        minimizeButton.setMargin(new Insets(0, 0, 0, 0));
+        minimizeButton.setHorizontalAlignment(SwingConstants.CENTER);
+        minimizeButton.setFocusPainted(false);
+        minimizeButton.setBorderPainted(false);
+        minimizeButton.setContentAreaFilled(false);
+        minimizeButton.setOpaque(false);
+        minimizeButton.setForeground(Constants.BRAND_COCOA_COLOR);
+        ThemeUtilities.applyBrandHover(minimizeButton, Constants.BRAND_COCOA_COLOR, null, Constants.BRAND_COCOA_COLOR, null);
+        menuActions.add(minimizeButton);
+        brandHeader.add(menuActions);
+        JLabel brandLogo = new JLabel();
+        brandLogo.setHorizontalAlignment(SwingConstants.CENTER);
+        java.net.URL brandLogoResource = TrayManager.class.getResource("/qz/ui/resources/aproveita-logo-horizontal.png");
+        if (brandLogoResource == null) {
+            log.error("Missing bundled brand logo for tray menu");
+        } else {
+            ImageIcon sourceLogo = new ImageIcon(brandLogoResource);
+            Image scaledLogo = sourceLogo.getImage().getScaledInstance(180, 52, Image.SCALE_SMOOTH);
+            brandLogo.setIcon(new ImageIcon(scaledLogo));
+        }
+        brandLogo.setAlignmentX(Component.CENTER_ALIGNMENT);
+        JLabel versionLabel = new JLabel("Versão " + Constants.VERSION);
+        versionLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        versionLabel.setFont(UIManager.getFont("Label.font").deriveFont(11f));
+        versionLabel.setForeground(Constants.BRAND_MUTED_COLOR);
+        brandHeader.add(brandLogo);
+        brandHeader.add(Box.createVerticalStrut(8));
+        brandHeader.add(versionLabel);
+        menuContent.add(brandHeader);
+        addMenuSeparator(menuContent);
 
         JMenuItem sitesItem = new JMenuItem("Gerenciar sites...", iconCache.getIcon(SAVED_ICON));
         sitesItem.setMnemonic(KeyEvent.VK_M);
@@ -244,91 +338,106 @@ public class TrayManager {
         sitesDialog = new SiteManagerDialog(sitesItem, iconCache, getUserPrefs());
         componentList.add(sitesDialog);
 
-        JMenuItem diagnosticMenu = new JMenu("Diagnóstico");
+        JPanel advancedOptions = new JPanel();
+        advancedOptions.setLayout(new BoxLayout(advancedOptions, BoxLayout.Y_AXIS));
+        advancedOptions.setOpaque(false);
+        advancedOptions.setBorder(BorderFactory.createEmptyBorder(0, 0, 4, 0));
 
-        JMenuItem browseApp = new JMenuItem("Abrir pasta do aplicativo...", iconCache.getIcon(FOLDER_ICON));
-        browseApp.setToolTipText(SystemUtilities.getJarParentPath().toString());
-        browseApp.setMnemonic(KeyEvent.VK_O);
-        browseApp.addActionListener(e -> ShellUtilities.browseAppDirectory());
-        diagnosticMenu.add(browseApp);
+        if (Constants.ENABLE_DIAGNOSTICS) {
+            JMenuItem browseApp = new JMenuItem("Abrir pasta do aplicativo...", iconCache.getIcon(FOLDER_ICON));
+            browseApp.setToolTipText(SystemUtilities.getJarParentPath().toString());
+            browseApp.setMnemonic(KeyEvent.VK_O);
+            browseApp.addActionListener(e -> ShellUtilities.browseAppDirectory());
+            advancedOptions.add(sectionLabel("Diagnóstico"));
+            addMenuRow(advancedOptions, browseApp);
 
-        JMenuItem browseUser = new JMenuItem("Abrir pasta do usuário...", iconCache.getIcon(FOLDER_ICON));
-        browseUser.setToolTipText(FileUtilities.USER_DIR.toString());
-        browseUser.setMnemonic(KeyEvent.VK_U);
-        browseUser.addActionListener(e -> ShellUtilities.browseDirectory(FileUtilities.USER_DIR));
-        diagnosticMenu.add(browseUser);
+            JMenuItem browseUser = new JMenuItem("Abrir pasta do usuário...", iconCache.getIcon(FOLDER_ICON));
+            browseUser.setToolTipText(FileUtilities.USER_DIR.toString());
+            browseUser.setMnemonic(KeyEvent.VK_U);
+            browseUser.addActionListener(e -> ShellUtilities.browseDirectory(FileUtilities.USER_DIR));
+            addMenuRow(advancedOptions, browseUser);
 
-        JMenuItem browseShared = new JMenuItem("Abrir pasta compartilhada...", iconCache.getIcon(FOLDER_ICON));
-        browseShared.setToolTipText(FileUtilities.SHARED_DIR.toString());
-        browseShared.setMnemonic(KeyEvent.VK_S);
-        browseShared.addActionListener(e -> ShellUtilities.browseDirectory(FileUtilities.SHARED_DIR));
-        diagnosticMenu.add(browseShared);
+            JMenuItem browseShared = new JMenuItem("Abrir pasta compartilhada...", iconCache.getIcon(FOLDER_ICON));
+            browseShared.setToolTipText(FileUtilities.SHARED_DIR.toString());
+            browseShared.setMnemonic(KeyEvent.VK_S);
+            browseShared.addActionListener(e -> ShellUtilities.browseDirectory(FileUtilities.SHARED_DIR));
+            addMenuRow(advancedOptions, browseShared);
 
-        diagnosticMenu.add(new JSeparator());
+            addMenuSeparator(advancedOptions);
 
-        JCheckBoxMenuItem notificationsItem = new JCheckBoxMenuItem("Mostrar todas as notificações");
-        notificationsItem.setToolTipText("Exibe avisos de conexão e desconexão.");
-        notificationsItem.setMnemonic(KeyEvent.VK_S);
-        notificationsItem.setState(getPref(TRAY_NOTIFICATIONS));
-        notificationsItem.addActionListener(notificationsListener);
-        diagnosticMenu.add(notificationsItem);
+            JCheckBoxMenuItem notificationsItem = new JCheckBoxMenuItem("Mostrar todas as notificações");
+            notificationsItem.setToolTipText("Exibe avisos de conexão e desconexão.");
+            notificationsItem.setMnemonic(KeyEvent.VK_S);
+            notificationsItem.setState(getPref(TRAY_NOTIFICATIONS));
+            notificationsItem.addActionListener(notificationsListener);
+            addMenuRow(advancedOptions, notificationsItem);
 
-        JCheckBoxMenuItem monocleItem = new JCheckBoxMenuItem("Modo compatível para impressão de páginas");
-        monocleItem.setToolTipText("Altera o modo de impressão de páginas. Requer reinicialização.");
-        monocleItem.setMnemonic(KeyEvent.VK_U);
-        monocleItem.setState(getPref(TRAY_MONOCLE));
-        if(Constants.JAVA_VERSION.getMajorVersion() <= 8) {
-            log.warn("Monocle engine is not available for this Java version");
-            monocleItem.setEnabled(false);
-            monocleItem.setToolTipText("Este modo de impressão não está disponível.");
+            JCheckBoxMenuItem monocleItem = new JCheckBoxMenuItem("Modo compatível para impressão de páginas");
+            monocleItem.setToolTipText("Altera o modo de impressão de páginas. Requer reinicialização.");
+            monocleItem.setMnemonic(KeyEvent.VK_U);
+            monocleItem.setState(getPref(TRAY_MONOCLE));
+            if(Constants.JAVA_VERSION.getMajorVersion() <= 8) {
+                log.warn("Monocle engine is not available for this Java version");
+                monocleItem.setEnabled(false);
+                monocleItem.setToolTipText("Este modo de impressão não está disponível.");
+            }
+            monocleItem.addActionListener(monocleListener);
+
+            if (Constants.JAVA_VERSION.greaterThanOrEqualTo(Version.valueOf("11.0.0"))) {
+                addMenuRow(advancedOptions, monocleItem);
+            }
+
+            addMenuSeparator(advancedOptions);
+
+            JMenuItem logItem = new JMenuItem("Registros do aplicativo...", iconCache.getIcon(LOG_ICON));
+            logItem.setMnemonic(KeyEvent.VK_L);
+            logItem.addActionListener(logListener);
+            addMenuRow(advancedOptions, logItem);
+            logDialog = new LogDialog(logItem, iconCache, getUserPrefs());
+            componentList.add(logDialog);
+
+            JMenuItem zipLogs = new JMenuItem("Salvar registros na área de trabalho");
+            zipLogs.setToolTipText("Salva um arquivo com os registros do aplicativo.");
+            zipLogs.setMnemonic(KeyEvent.VK_Z);
+            zipLogs.addActionListener(e -> FileUtilities.zipLogs());
+            addMenuRow(advancedOptions, zipLogs);
         }
-        monocleItem.addActionListener(monocleListener);
-
-        if (Constants.JAVA_VERSION.greaterThanOrEqualTo(Version.valueOf("11.0.0"))) { //only include if it can be used
-            diagnosticMenu.add(monocleItem);
-        }
-
-        diagnosticMenu.add(new JSeparator());
-
-        JMenuItem logItem = new JMenuItem("Registros do aplicativo...", iconCache.getIcon(LOG_ICON));
-        logItem.setMnemonic(KeyEvent.VK_L);
-        logItem.addActionListener(logListener);
-        diagnosticMenu.add(logItem);
-        logDialog = new LogDialog(logItem, iconCache, getUserPrefs());
-        componentList.add(logDialog);
-
-        JMenuItem zipLogs = new JMenuItem("Salvar registros na área de trabalho");
-        zipLogs.setToolTipText("Salva um arquivo com os registros do aplicativo.");
-        zipLogs.setMnemonic(KeyEvent.VK_Z);
-        zipLogs.addActionListener(e -> FileUtilities.zipLogs());
-        diagnosticMenu.add(zipLogs);
 
         JMenuItem desktopItem = new JMenuItem("Criar atalho na área de trabalho", iconCache.getIcon(DESKTOP_ICON));
         desktopItem.setMnemonic(KeyEvent.VK_D);
         desktopItem.addActionListener(desktopListener());
+        addMenuRow(advancedOptions, desktopItem);
+        addMenuRow(advancedOptions, sitesItem);
 
         anonymousItem = new JCheckBoxMenuItem("Bloquear conexões não verificadas");
         anonymousItem.setToolTipText("Bloqueia solicitações sem uma assinatura válida.");
         anonymousItem.setMnemonic(KeyEvent.VK_K);
         anonymousItem.setState(Certificate.UNKNOWN.isBlocked());
         anonymousItem.addActionListener(anonymousListener);
+        addMenuRow(advancedOptions, anonymousItem);
 
-        if(Constants.ENABLE_DIAGNOSTICS) {
-            advancedMenu.add(diagnosticMenu);
-            advancedMenu.add(new JSeparator());
-        }
-        advancedMenu.add(sitesItem);
-        advancedMenu.add(desktopItem);
-        advancedMenu.add(new JSeparator());
-        advancedMenu.add(anonymousItem);
+        JButton advancedItem = new JButton("Avançado  +", iconCache.getIcon(SETTINGS_ICON));
+        advancedItem.setName("tray-advanced");
+        advancedItem.setMnemonic(KeyEvent.VK_A);
+        advancedItem.addActionListener(e -> {
+            boolean expanded = !advancedOptions.isVisible();
+            advancedOptions.setVisible(expanded);
+            advancedItem.setText(expanded ? "Avançado  -" : "Avançado  +");
+            updateTrayPopupSize(popup, menuContent);
+        });
+        addMenuRow(menuContent, advancedItem);
+        advancedOptions.setVisible(false);
+        menuContent.add(advancedOptions);
 
         JMenuItem reloadItem = new JMenuItem("Recarregar", iconCache.getIcon(RELOAD_ICON));
         reloadItem.setMnemonic(KeyEvent.VK_R);
         reloadItem.addActionListener(reloadListener);
+        addMenuRow(menuContent, reloadItem);
 
         JMenuItem aboutItem = new JMenuItem("Sobre o " + Constants.APP_DISPLAY_NAME, iconCache.getIcon(ABOUT_ICON));
         aboutItem.setMnemonic(KeyEvent.VK_B);
         aboutItem.addActionListener(aboutListener);
+        addMenuRow(menuContent, aboutItem);
         aboutDialog = new AboutDialog(aboutItem, iconCache);
         componentList.add(aboutDialog);
 
@@ -337,7 +446,7 @@ public class TrayManager {
             MacUtilities.registerQuitHandler(this);
         }
 
-        JSeparator separator = new JSeparator();
+        addMenuSeparator(menuContent);
 
         JCheckBoxMenuItem startupItem = new JCheckBoxMenuItem("Iniciar com o sistema");
         startupItem.setMnemonic(KeyEvent.VK_S);
@@ -348,20 +457,100 @@ public class TrayManager {
             startupItem.setState(false);
             startupItem.setToolTipText("A inicialização automática foi desativada pelo administrador.");
         }
+        addMenuRow(menuContent, startupItem);
 
         JMenuItem exitItem = new JMenuItem("Sair", iconCache.getIcon(EXIT_ICON));
         exitItem.addActionListener(exitListener);
+        addMenuRow(menuContent, exitItem);
 
-        popup.add(advancedMenu);
-        popup.add(reloadItem);
-        popup.add(aboutItem);
-        popup.add(startupItem);
-        popup.add(separator);
-        popup.add(exitItem);
+        popup.add(menuContent);
+        styleTrayPopup(popup);
+        popup.addPopupMenuListener(new PopupMenuListener() {
+            @Override
+            public void popupMenuWillBecomeVisible(PopupMenuEvent event) {
+                resetTrayRows(popup);
+            }
+
+            @Override
+            public void popupMenuWillBecomeInvisible(PopupMenuEvent event) {
+                resetTrayRows(popup);
+            }
+
+            @Override
+            public void popupMenuCanceled(PopupMenuEvent event) {
+                resetTrayRows(popup);
+            }
+        });
 
         if (tray != null) {
             tray.setJPopupMenu(popup);
         }
+    }
+
+    private void resetTrayRows(Container container) {
+        for (Component component : container.getComponents()) {
+            if (component instanceof AbstractButton) {
+                AbstractButton item = (AbstractButton)component;
+                item.getModel().setRollover(false);
+                item.getModel().setArmed(false);
+                styleTrayRow(item);
+            }
+            if (component instanceof Container) {
+                resetTrayRows((Container)component);
+            }
+        }
+    }
+
+    private JLabel sectionLabel(String text) {
+        JLabel label = new JLabel(text);
+        label.setFont(UIManager.getFont("Label.font").deriveFont(Font.BOLD, 11f));
+        label.setForeground(Constants.BRAND_PRIMARY_COLOR);
+        label.setBorder(BorderFactory.createEmptyBorder(7, 4, 4, 4));
+        label.setAlignmentX(Component.LEFT_ALIGNMENT);
+        label.setMaximumSize(new Dimension(280, Integer.MAX_VALUE));
+        return label;
+    }
+
+    private void addMenuSeparator(JPanel panel) {
+        JSeparator separator = new JSeparator();
+        separator.setPreferredSize(new Dimension(280, 2));
+        separator.setMaximumSize(new Dimension(280, 2));
+        separator.setAlignmentX(Component.LEFT_ALIGNMENT);
+        panel.add(separator);
+    }
+
+    private void addMenuRow(JPanel panel, JMenuItem item) {
+        addMenuRow(panel, (AbstractButton)item);
+    }
+
+    private void addMenuRow(JPanel panel, AbstractButton item) {
+        item.setIconTextGap(12);
+        item.setHorizontalAlignment(SwingConstants.LEFT);
+        item.setAlignmentX(Component.LEFT_ALIGNMENT);
+        item.setPreferredSize(new Dimension(280, 34));
+        item.setMinimumSize(new Dimension(280, 34));
+        item.setMaximumSize(new Dimension(280, 34));
+        styleTrayRow(item);
+        item.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseEntered(java.awt.event.MouseEvent event) {
+                item.setBackground(Constants.BRAND_PRIMARY_COLOR);
+                item.setForeground(Color.WHITE);
+            }
+            @Override
+            public void mouseExited(java.awt.event.MouseEvent event) {
+                styleTrayRow(item);
+            }
+        });
+        panel.add(item);
+    }
+
+    private void updateTrayPopupSize(JPopupMenu popup, JPanel content) {
+        content.invalidate();
+        content.revalidate();
+        content.repaint();
+        popup.revalidate();
+        tray.updateMenuSize(popup);
     }
 
 

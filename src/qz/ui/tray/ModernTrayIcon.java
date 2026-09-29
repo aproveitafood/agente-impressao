@@ -11,24 +11,26 @@
 
 package qz.ui.tray;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jdesktop.swinghelper.tray.JXTrayIcon;
 
 import javax.swing.*;
-import javax.swing.event.PopupMenuEvent;
-import javax.swing.event.PopupMenuListener;
 import java.awt.*;
 import java.awt.event.AWTEventListener;
 import java.awt.event.MouseEvent;
-import java.awt.event.WindowAdapter;
-import java.awt.event.WindowEvent;
 
 /**
  * @author A. Tres Finocchiaro
  */
 public class ModernTrayIcon extends JXTrayIcon {
-    private static Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
-    private JFrame invisibleFrame;
+    private static final Logger log = LogManager.getLogger(ModernTrayIcon.class);
+
+    private final TrayActivationGate activationGate = new TrayActivationGate();
+
+    private TaskbarTrayIcon menuWindow;
     private JPopupMenu popup;
+    private AWTEventListener trayEventListener;
 
     public ModernTrayIcon(Image image) {
         super(image);
@@ -38,29 +40,15 @@ public class ModernTrayIcon extends JXTrayIcon {
     public void setJPopupMenu(final JPopupMenu popup) {
         this.popup = popup;
 
-        invisibleFrame = new JFrame();
-        invisibleFrame.setAlwaysOnTop(true);
-        invisibleFrame.setUndecorated(true);
-        invisibleFrame.setBackground(Color.BLACK);
-        invisibleFrame.pack();
-        invisibleFrame.setSize(1, 1);
-        invisibleFrame.setFocusableWindowState(true);
-
-        popup.addPopupMenuListener(new PopupMenuListener() {
-            @Override public void popupMenuWillBecomeVisible(PopupMenuEvent e) {}
-            @Override public void popupMenuWillBecomeInvisible(PopupMenuEvent e) { invisibleFrame.setVisible(false); }
-            @Override public void popupMenuCanceled(PopupMenuEvent e) { invisibleFrame.setVisible(false); }
-        });
-
-        invisibleFrame.addWindowListener(new WindowAdapter() {
-            @Override
-            public void windowActivated(WindowEvent we) {
-                popup.setInvoker(invisibleFrame);
-                int popupY = invisibleFrame.getY() > screenSize.getHeight() / 2 ? -popup.getPreferredSize().height : 0;
-                popup.show(invisibleFrame, 0, popupY);
-                popup.requestFocus();
-            }
-        });
+        if (menuWindow != null) {
+            menuWindow.dispose();
+        }
+        activationGate.reset();
+        menuWindow = new TaskbarTrayIcon(getImage(), null, true);
+        menuWindow.setType(Window.Type.UTILITY);
+        menuWindow.setAlwaysOnTop(true);
+        menuWindow.setFocusableWindowState(true);
+        menuWindow.setJPopupMenu(popup);
 
         addTrayListener();
     }
@@ -68,8 +56,8 @@ public class ModernTrayIcon extends JXTrayIcon {
     @Override
     public void setImage(Image image) {
         super.setImage(image);
-        if (invisibleFrame != null) {
-            invisibleFrame.setIconImage(image);
+        if (menuWindow != null) {
+            menuWindow.setIconImage(image);
         }
     }
 
@@ -77,42 +65,85 @@ public class ModernTrayIcon extends JXTrayIcon {
         return popup;
     }
 
-    /**
-     * Functional equivalent of a <code>MouseAdapter</code>, but accommodates an edge-case in Gnome3 where the tray
-     * icon cannot listen on mouse events.
-     */
-    private void addTrayListener() {
-        Toolkit.getDefaultToolkit().addAWTEventListener(new AWTEventListener() {
-            @Override
-            public void eventDispatched(AWTEvent e) {
-                Point p = isTrayEvent(e);
-                if (p != null) {
-                    SwingUtilities.invokeLater(() -> {
-                        invisibleFrame.setLocation(p);
-                        invisibleFrame.setVisible(true);
-                        invisibleFrame.toFront();
-                        invisibleFrame.requestFocus();
-                    });
-                }
-            }
-        }, MouseEvent.MOUSE_EVENT_MASK);
+    public void updateMenuSize() {
+        if (menuWindow != null) {
+            menuWindow.updateMenuSize();
+        }
     }
 
     /**
-     * Determines if TrayIcon event is detected
-     * @param e An AWTEvent
-     * @return A Point on the screen which the tray event occurred, or null if none is found
+     * Functional equivalent of a <code>MouseAdapter</code>, but accommodates an edge-case in Gnome3 where the tray
+     * icon cannot listen on mouse events.
+     *
+     * Every release the tray host reports for this icon is filtered through
+     * {@link TrayActivationGate}, so the menu only opens or closes on a real activation.
      */
-    private static Point isTrayEvent(AWTEvent e) {
-        if (e instanceof MouseEvent) {
-            MouseEvent me = (MouseEvent)e;
-
-            if (me.getID() == MouseEvent.MOUSE_RELEASED && me.getSource() != null) {
-                if (me.getSource().getClass().getName().contains("TrayIcon")) {
-                    return me.getLocationOnScreen();
-                }
-            }
+    private void addTrayListener() {
+        if (trayEventListener != null) {
+            Toolkit.getDefaultToolkit().removeAWTEventListener(trayEventListener);
         }
-        return null;
+        trayEventListener = new AWTEventListener() {
+            @Override
+            public void eventDispatched(AWTEvent e) {
+                if (!(e instanceof MouseEvent) || menuWindow == null) {
+                    return;
+                }
+
+                MouseEvent mouseEvent = (MouseEvent)e;
+                if (mouseEvent.getSource() != ModernTrayIcon.this) {
+                    if (mouseEvent.getID() == MouseEvent.MOUSE_RELEASED && isTrayIcon(mouseEvent.getSource())) {
+                        log.debug("Ignoring tray release from another icon: {}", mouseEvent.getSource().getClass().getName());
+                    }
+                    return;
+                }
+
+                TrayActivationGate.Event event = toTrayEvent(mouseEvent.getID());
+                if (event == TrayActivationGate.Event.OTHER) {
+                    return;
+                }
+
+                Point pointer = event == TrayActivationGate.Event.RELEASE ? mouseEvent.getLocationOnScreen() : null;
+                SwingUtilities.invokeLater(() -> applyTrayEvent(event, pointer));
+            }
+        };
+        Toolkit.getDefaultToolkit().addAWTEventListener(trayEventListener, MouseEvent.MOUSE_EVENT_MASK);
+    }
+
+    private void applyTrayEvent(TrayActivationGate.Event event, Point pointer) {
+        TaskbarTrayIcon window = menuWindow;
+        if (window == null) {
+            return;
+        }
+
+        boolean menuVisible = window.isMenuVisible();
+        TrayActivationGate.Decision decision = activationGate.onEvent(
+                event, pointer, menuVisible, window.getMenuScreenBounds(), System.currentTimeMillis());
+        if (decision != TrayActivationGate.Decision.TOGGLE) {
+            log.debug("Ignoring tray {} at {} (menu {}): not a user activation",
+                    event, pointer, menuVisible ? "open" : "closed");
+            return;
+        }
+
+        log.info("Tray icon activated; {} the menu", menuVisible ? "closing" : "opening");
+        if (menuVisible) {
+            window.hideMenu();
+        } else {
+            window.showMenu(pointer);
+        }
+    }
+
+    private static TrayActivationGate.Event toTrayEvent(int eventId) {
+        switch(eventId) {
+            case MouseEvent.MOUSE_PRESSED:
+                return TrayActivationGate.Event.PRESS;
+            case MouseEvent.MOUSE_RELEASED:
+                return TrayActivationGate.Event.RELEASE;
+            default:
+                return TrayActivationGate.Event.OTHER;
+        }
+    }
+
+    private static boolean isTrayIcon(Object source) {
+        return source != null && source.getClass().getName().contains("TrayIcon");
     }
 }

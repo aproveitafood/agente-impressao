@@ -3,6 +3,7 @@ package qz.ui.component;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import qz.common.Constants;
+import qz.ui.ThemeUtilities;
 import qz.ui.Themeable;
 import qz.utils.ShellUtilities;
 import qz.utils.SystemUtilities;
@@ -86,6 +87,12 @@ public class LinkLabel extends JButton implements Themeable {
         setBorder(null);
         setOpaque(false);
         setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+    }
+
+    @Override
+    public void setForeground(Color foreground) {
+        super.setForeground(foreground);
+        ThemeUtilities.applyBrandHover(this, foreground, null, foreground, null);
     }
 
     public AccessibleContext getAccessibleContext() {

@@ -73,7 +73,7 @@ public enum TrayType {
     }
 
     public Dimension getSize() {
-        return isTray() ? tray.getSize() : taskbar.getSize();
+        return isTray() ? tray.getSize() : taskbar.getTrayIconSize();
     }
 
     public void setToolTip(String tooltip) {
@@ -90,6 +90,16 @@ public enum TrayType {
         }
     }
 
+    public void updateMenuSize(JPopupMenu popup) {
+        if (taskbar != null) {
+            taskbar.updateMenuSize();
+        } else if (tray instanceof ModernTrayIcon) {
+            ((ModernTrayIcon)tray).updateMenuSize();
+        } else {
+            popup.setPopupSize(popup.getPreferredSize());
+        }
+    }
+
     public void displayMessage(String caption, String text, TrayIcon.MessageType level) {
         if (isTray()) {
             tray.displayMessage(caption, text, level);
@@ -101,7 +111,7 @@ public enum TrayType {
     public void showTaskbar() {
         if (getTaskbar()) {
             taskbar.setVisible(true);
-            taskbar.setState(Frame.ICONIFIED);
+            taskbar.minimizeToTaskbar();
         }
     }
 }

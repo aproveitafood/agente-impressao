@@ -25,6 +25,7 @@ import qz.build.provision.params.Arch;
 import qz.build.provision.params.Os;
 import qz.common.Constants;
 import qz.installer.Installer;
+import qz.ui.ThemeUtilities;
 import qz.utils.linux.LinuxUtilities;
 
 import javax.swing.*;
@@ -378,6 +379,7 @@ public class SystemUtilities {
             UIManager.getDefaults().put("Button.showMnemonics", Boolean.TRUE);
             UIManager.setLookAndFeel(calculateLaf());
             adjustThemeColors();
+            ThemeUtilities.applyBrandTheme();
             return true;
         } catch (Throwable t) {
             log.warn("Error getting the default look and feel");

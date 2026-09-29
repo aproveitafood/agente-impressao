@@ -53,6 +53,7 @@ public class IconCache {
 
         // Menu Item icons
         EXIT_ICON("qz-exit.png"),
+        MINIMIZE_ICON("qz-minimize.png"),
         RELOAD_ICON("qz-reload.png"),
         ABOUT_ICON("qz-about.png"),
         DESKTOP_ICON("qz-desktop.png"),

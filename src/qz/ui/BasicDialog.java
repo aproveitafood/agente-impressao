@@ -30,13 +30,13 @@ public class BasicDialog extends JDialog implements Themeable {
     private int stockButtonCount = 0;
 
     public BasicDialog(JMenuItem caller, IconCache iconCache) {
-        super((Frame)null, caller.getText().replaceAll("\\.+", ""), true);
+        super((Frame)null, caller.getText().replaceAll("\\.+", ""), false);
         this.iconCache = iconCache;
         initBasicComponents();
     }
 
     public BasicDialog(Frame owner, String title, IconCache iconCache) {
-        super(owner, title, true);
+        super(owner, title, false);
         this.iconCache = iconCache;
         initBasicComponents();
     }
@@ -44,10 +44,11 @@ public class BasicDialog extends JDialog implements Themeable {
     public void initBasicComponents() {
         setIconImages(iconCache.getImages(IconCache.Icon.TASK_BAR_ICON));
         mainPanel = new JPanel();
-        mainPanel.setBorder(new EmptyBorder(Constants.BORDER_PADDING, Constants.BORDER_PADDING, Constants.BORDER_PADDING, Constants.BORDER_PADDING));
+        mainPanel.setBorder(new EmptyBorder(Constants.BORDER_PADDING + 6, Constants.BORDER_PADDING + 6,
+                Constants.BORDER_PADDING + 6, Constants.BORDER_PADDING + 6));
 
         headerComponent = new JLabel();
-        headerComponent.setBorder(new EmptyBorder(0, 0, Constants.BORDER_PADDING, 0));
+        headerComponent.setBorder(new EmptyBorder(0, 0, Constants.BORDER_PADDING + 4, 0));
         mainPanel.add(headerComponent, BorderLayout.PAGE_START);
 
         buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
@@ -84,12 +85,20 @@ public class BasicDialog extends JDialog implements Themeable {
 
     @Override
     public void refresh() {
+        if (headerComponent instanceof JLabel) {
+            JLabel label = (JLabel)headerComponent;
+            label.setFont(UIManager.getFont("TitledBorder.font"));
+            label.setForeground(Constants.BRAND_PRIMARY_COLOR);
+        }
         ThemeUtilities.refreshAll(this);
     }
 
     public JLabel setHeader(String header) {
         if (headerComponent instanceof JLabel) {
-            ((JLabel)headerComponent).setText(String.format(header, "").replaceAll("\\s+", " "));
+            JLabel label = (JLabel)headerComponent;
+            label.setText(String.format(header, "").replaceAll("\\s+", " "));
+            label.setFont(UIManager.getFont("TitledBorder.font"));
+            label.setForeground(Constants.BRAND_PRIMARY_COLOR);
             return (JLabel)headerComponent;
         }
         return (JLabel)setHeader(new JLabel(header));

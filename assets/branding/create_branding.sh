@@ -70,7 +70,7 @@ pushd ../../src/qz/ui/resources &> /dev/null
 icons_color="$1"
 if [ -n "$icons_color" ]; then
   echo Colorizing icons to "$icons_color" as requested
-  for img in about allow desktop exit field folder log reload saved settings; do
+  for img in about allow copy desktop exit field folder log minimize reload saved settings; do
     if [ -f qz-$img.png ]; then
       echo Colorizing qz-$img.png
       magick qz-$img.png -fill "$icons_color" -colorize 100 qz-$img.png
