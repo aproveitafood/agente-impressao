@@ -47,8 +47,10 @@ Inclua o script do agente na sua página HTML:
 <script src="caminho/para/qz-tray.js"></script>
 ```
 
-O arquivo `qz-tray.js` está em `out/dist/` após o build, ou na pasta `js/` do
-repositório (versão de desenvolvimento).
+O arquivo de desenvolvimento está em `js/qz-tray.js` neste repositório. O
+alvo `ant distribute` também cria a cópia de demonstração em
+`out/dist/demo/js/qz-tray.js`; `ant build-jar` gera somente o JAR e não cria
+essa pasta.
 
 ### 4. Configurar segurança (modo anônimo — somente desenvolvimento)
 

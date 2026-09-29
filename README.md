@@ -91,6 +91,7 @@ antes de escolher a validação adequada.
 - [Arquitetura](docs/arquitetura.md)
 - [Desenvolvimento, build e testes](docs/desenvolvimento.md)
 - [Impressão e integração](docs/impressao-e-integracao.md)
+- [Responsabilidades e handoff](docs/responsabilidades-e-handoff.md)
 - [Configuração e segurança](docs/configuracao-e-seguranca.md)
 - [Interface e identidade visual](docs/interface-e-identidade.md)
 - [Operação e diagnóstico](docs/operacao-e-diagnostico.md)

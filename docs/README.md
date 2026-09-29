@@ -12,6 +12,7 @@ código e nos testes correspondentes.
 | [Arquitetura](arquitetura.md) | Componentes Java e fluxo de inicialização, conexão e impressão |
 | [Desenvolvimento](desenvolvimento.md) | Pré-requisitos, build Ant, execução e testes |
 | [Impressão e integração](impressao-e-integracao.md) | Como o frontend se comunica com o agente, exemplos JS completos |
+| [Responsabilidades e handoff](responsabilidades-e-handoff.md) | Limites entre frontend, backend e agente; contrato e validação conjunta |
 | [Configuração e segurança](configuracao-e-seguranca.md) | Preferências, portas, diretórios, certificados e limites |
 | [Interface e identidade](interface-e-identidade.md) | Marca, fontes, paleta, recursos e comportamento de bandeja |
 | [Operação e diagnóstico](operacao-e-diagnostico.md) | Logs, execução local e diagnóstico de problemas |
