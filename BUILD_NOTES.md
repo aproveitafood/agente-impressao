@@ -1,7 +1,7 @@
-# meeu.menu fork — build notes
+# Agente de Impressão — build notes
 
-Vendored fork (v2.3.0) for thermal printer integration via QZ Tray, driven
-from the backend `printers` module (see backend repo, issue #25).
+Aplicativo desktop do Aproveita Food para integração com impressoras térmicas,
+acionado a partir do módulo `printers` do backend (ver repo backend, issue #25).
 
 ## Building
 

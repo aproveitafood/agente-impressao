@@ -5,7 +5,7 @@
 <h1 align="center">Agente de Impressão</h1>
 
 <p align="center">
-  Conecta o Meeu Menu às impressoras e dispositivos da máquina via WebSocket local.
+  Conecta o Aproveita Food às impressoras e dispositivos da máquina via WebSocket local.
 </p>
 
 <p align="center">
@@ -18,7 +18,7 @@
 
 ---
 
-Aplicativo desktop que conecta o Meeu Menu às impressoras e dispositivos
+Aplicativo desktop que conecta o Aproveita Food às impressoras e dispositivos
 disponíveis na máquina. Ele mantém um serviço local para comunicação com o
 cliente JavaScript, gerencia certificados e permissões e oferece uma interface
 pela bandeja do sistema.

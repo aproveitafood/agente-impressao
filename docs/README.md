@@ -23,7 +23,7 @@ em [`../AGENTS.md`](../AGENTS.md).
 ## Escopo e fonte de verdade
 
 Este repositório é a aplicação Java desktop e seus recursos de build, teste e
-empacotamento. Ele não contém o backend nem o frontend web do Meeu Menu. A
+empacotamento. Ele não contém o backend nem o frontend web do Aproveita Food. A
 integração deve ser confirmada nos contratos do cliente que consome o serviço,
 além deste código.
 
