@@ -65,6 +65,8 @@ jobs:
             VERSION=$(grep -oP 'Version\.valueOf\("\K[^"]+' src/qz/common/Constants.java)
           fi
           chmod +x ant/linux/deb-postinstall.sh
+          # cups-bsd fornece /usr/bin/lpr: o Java envia a impressão RAW por ele;
+          # sem o pacote, qz.print() falha com "Cannot run program /usr/bin/lpr".
           fpm -s dir -t deb \
             -n agente-impressao \
             -v "${VERSION}" \
@@ -72,6 +74,7 @@ jobs:
             --description "Agente de impressão do Aproveita Food" \
             --maintainer "Aproveita Food <contato@aproveitafood.com.br>" \
             --url "https://github.com/aproveitafood/agente-impressao" \
+            --depends cups-bsd \
             --after-install ant/linux/deb-postinstall.sh \
             --package "out/agente-impressao-${VERSION}-amd64.deb" \
             out/dist/=/opt/agente-impressao/

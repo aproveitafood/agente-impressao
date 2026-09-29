@@ -33,7 +33,12 @@ Baixe o instalador para sua plataforma na [página de releases](https://github.c
 | Plataforma | Arquivo |
 |---|---|
 | Windows | `agente-impressao-x.x.x-x86_64.exe` |
-| Linux | `agente-impressao-x.x.x-x86_64.run` |
+| Linux (Debian/Ubuntu) | `agente-impressao-x.x.x-amd64.deb` |
+| Linux (outras) | `agente-impressao-x.x.x-x86_64.run` |
+
+No Linux, a impressão depende do comando `/usr/bin/lpr` (pacote `cups-bsd`).
+O `.deb` já instala essa dependência: `sudo apt install ./agente-impressao-x.x.x-amd64.deb`.
+Com o `.run`, instale antes: `sudo apt install cups-bsd`.
 
 > **macOS:** suporte planejado para versão futura.
 
