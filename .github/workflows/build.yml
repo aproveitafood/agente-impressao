@@ -46,6 +46,11 @@ jobs:
       - name: Build instalador Linux
         run: ant makeself
 
+      - name: Mover .run para out/dist
+        run: |
+          mkdir -p out/dist
+          mv out/*.run out/dist/ 2>/dev/null || true
+
       - name: Assinar com GPG (opcional — só se o secret existir)
         # secrets não pode aparecer em if:; passamos via env e checamos no shell
         env:
