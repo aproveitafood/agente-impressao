@@ -55,11 +55,6 @@ jobs:
       - name: Build instalador Linux
         run: ant makeself
 
-      - name: Mover .run para out/dist
-        run: |
-          mkdir -p out/dist
-          mv out/*.run out/dist/ 2>/dev/null || true
-
       - name: Assinar com GPG (opcional — só se o secret existir)
         # secrets não pode aparecer em if:; passamos via env e checamos no shell
         env:
@@ -71,7 +66,7 @@ jobs:
             exit 0
           fi
           echo "$GPG_PRIVATE_KEY" | gpg --batch --import
-          for f in out/dist/*.run; do
+          for f in out/*.run; do
             gpg --batch --yes --passphrase "$GPG_PASSPHRASE" \
                 --armor --detach-sign "$f"
           done
@@ -81,8 +76,8 @@ jobs:
         with:
           name: linux-installer
           path: |
-            out/dist/*.run
-            out/dist/*.run.asc
+            out/*.run
+            out/*.run.asc
           retention-days: 1
 
   # ───────────────────────────────────────────────────────────────────────────
@@ -157,10 +152,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-installer
-          # Se SignPath rodou, o .exe assinado fica em signed/; senão, usa o original
+          # Instalador versionado final fica em out/*.exe (não out/dist/ que tem os intermediários)
           path: |
-            out/dist/signed/*.exe
-            out/dist/*.exe
+            out/*.exe
           if-no-files-found: warn
           retention-days: 1
 
