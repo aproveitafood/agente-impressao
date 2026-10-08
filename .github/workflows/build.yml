@@ -191,8 +191,9 @@ jobs:
           fi
 
       - name: Build instalador Windows
-        shell: bash
-        run: ant $ANT_AUTHCERT nsis
+        # PowerShell (e não bash): o makensis instalado pelo Chocolatey só está no PATH dele
+        run: |
+          if ($env:ANT_AUTHCERT) { ant $env:ANT_AUTHCERT nsis } else { ant nsis }
 
       - name: Conferir certificado Aproveita no pacote
         if: env.AUTHCERT_FILE != ''
