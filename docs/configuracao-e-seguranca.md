@@ -35,6 +35,25 @@ firewall nem autenticação. Revise `security.wss.httpsonly` e
 - Nunca inclua chaves privadas, certificados de produção, senhas ou tokens neste
   repositório ou em documentação de exemplo.
 
+### Certificado Aproveita embutido nos instaladores
+
+As versões publicadas embutem o certificado **público** de assinatura do
+Aproveita (o mesmo servido pelo backend em `GET /printers/qz/cert`) como
+`override.crt`, ao lado do JAR. O agente o trata como CA confiável
+(`authcert.override` tem o mesmo efeito por preferência) e, por ser igual a uma CA
+confiável, o grava como permitido na primeira avaliação: o diálogo **Autorizar**
+não aparece para as solicitações assinadas pelo backend.
+
+A chave privada correspondente existe só no backend (`QZ_PRIVATE_KEY`). Quem a
+possuir consegue imprimir em qualquer agente instalado: trate-a como segredo e
+troque o par se houver suspeita de vazamento (publicar nova versão do agente com o
+certificado novo). `tray.strictmode` e a validação de assinatura não mudam.
+
+Como conferir uma instalação: o arquivo `override.crt` existe na pasta do agente
+(no Linux, `/opt/agente-impressao/override.crt`) e o log registra
+`Adding CA certificate: CN=Aproveita Food QZ Signing, O=Aproveita Food`.
+Detalhes do build em [Desenvolvimento](desenvolvimento.md).
+
 ## Arquivos de usuário e preferências
 
 O nome do diretório de dados é `agente-impressao`, definido em `Constants.DATA_DIR`.

@@ -70,8 +70,8 @@ e o frontend apresenta o certificado público:
 
 ```js
 qz.security.setCertificatePromise(function(resolve, reject) {
-    // Busque o certificado PEM do backend
-    fetch("/api/agente/certificado")
+    // Certificado PEM público (requer sessão da gestão: cookies)
+    fetch(`${API_URL}/printers/qz/cert`, { credentials: "include" })
         .then(r => r.text())
         .then(resolve)
         .catch(reject);
@@ -81,11 +81,12 @@ qz.security.setSignatureAlgorithm("SHA512");
 
 qz.security.setSignaturePromise(function(toSign) {
     return function(resolve, reject) {
-        // Backend assina com a chave privada
-        fetch("/api/agente/assinar", {
+        // Backend assina com a chave privada (resposta: texto com a assinatura em base64)
+        fetch(`${API_URL}/printers/qz/sign`, {
             method: "POST",
-            body: toSign,
-            headers: { "Content-Type": "text/plain" }
+            credentials: "include",
+            body: JSON.stringify({ request: toSign }),
+            headers: { "Content-Type": "application/json" }
         })
         .then(r => r.text())
         .then(resolve)

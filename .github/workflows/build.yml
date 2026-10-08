@@ -53,8 +53,37 @@ jobs:
             src/qz/common/Constants.java
           echo "Versão definida: ${VERSION}"
 
+      - name: Preparar certificado Aproveita (override.crt)
+        shell: bash
+        env:
+          AUTHCERT_PEM: ${{ vars.AUTHCERT_PEM }}
+        run: |
+          # Certificado PÚBLICO de assinatura do Aproveita (o mesmo servido por
+          # GET /printers/qz/cert do backend). A chave privada nunca entra aqui.
+          # Embutido no pacote como override.crt, o agente passa a confiar nele e o
+          # grava como permitido na primeira avaliação (sem o diálogo "Autorizar").
+          CRT="${RUNNER_TEMP//\\//}/aproveita-authcert.crt"
+          if [ -n "$AUTHCERT_PEM" ]; then
+            printf '%s\n' "$AUTHCERT_PEM" > "$CRT"
+            openssl x509 -in "$CRT" -noout -subject -enddate -fingerprint -sha256
+            echo "AUTHCERT_FILE=$CRT" >> "$GITHUB_ENV"
+            echo "ANT_AUTHCERT=-Dauthcert.use=$CRT" >> "$GITHUB_ENV"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "::error::Variável AUTHCERT_PEM (certificado público do Aproveita) não definida: a release sairia sem o certificado embutido e as lojas veriam o diálogo Autorizar."
+            exit 1
+          else
+            echo "::warning::AUTHCERT_PEM não definida: este build não embute o certificado Aproveita."
+          fi
+
       - name: Build instalador Linux
-        run: ant makeself
+        run: ant $ANT_AUTHCERT makeself
+
+      - name: Conferir certificado Aproveita no pacote
+        if: env.AUTHCERT_FILE != ''
+        shell: bash
+        run: |
+          cmp "$AUTHCERT_FILE" out/dist/override.crt
+          echo "override.crt presente e idêntico ao certificado informado"
 
       - name: Build instalador .deb
         run: |
@@ -139,8 +168,38 @@ jobs:
             src/qz/common/Constants.java
           echo "Versão definida: ${VERSION}"
 
+      - name: Preparar certificado Aproveita (override.crt)
+        shell: bash
+        env:
+          AUTHCERT_PEM: ${{ vars.AUTHCERT_PEM }}
+        run: |
+          # Certificado PÚBLICO de assinatura do Aproveita (o mesmo servido por
+          # GET /printers/qz/cert do backend). A chave privada nunca entra aqui.
+          # Embutido no pacote como override.crt, o agente passa a confiar nele e o
+          # grava como permitido na primeira avaliação (sem o diálogo "Autorizar").
+          CRT="${RUNNER_TEMP//\\//}/aproveita-authcert.crt"
+          if [ -n "$AUTHCERT_PEM" ]; then
+            printf '%s\n' "$AUTHCERT_PEM" > "$CRT"
+            openssl x509 -in "$CRT" -noout -subject -enddate -fingerprint -sha256
+            echo "AUTHCERT_FILE=$CRT" >> "$GITHUB_ENV"
+            echo "ANT_AUTHCERT=-Dauthcert.use=$CRT" >> "$GITHUB_ENV"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "::error::Variável AUTHCERT_PEM (certificado público do Aproveita) não definida: a release sairia sem o certificado embutido e as lojas veriam o diálogo Autorizar."
+            exit 1
+          else
+            echo "::warning::AUTHCERT_PEM não definida: este build não embute o certificado Aproveita."
+          fi
+
       - name: Build instalador Windows
-        run: ant nsis
+        shell: bash
+        run: ant $ANT_AUTHCERT nsis
+
+      - name: Conferir certificado Aproveita no pacote
+        if: env.AUTHCERT_FILE != ''
+        shell: bash
+        run: |
+          cmp "$AUTHCERT_FILE" out/dist/override.crt
+          echo "override.crt presente e idêntico ao certificado informado"
 
       - name: Verificar secrets SignPath
         id: signpath-check
@@ -233,11 +292,28 @@ jobs:
       #     security list-keychain -d user -s "$KEYCHAIN"
       # ────────────────────────────────────────────────────────────────────
 
+      - name: Preparar certificado Aproveita (override.crt)
+        shell: bash
+        env:
+          AUTHCERT_PEM: ${{ vars.AUTHCERT_PEM }}
+        run: |
+          CRT="${RUNNER_TEMP}/aproveita-authcert.crt"
+          if [ -n "$AUTHCERT_PEM" ]; then
+            printf '%s\n' "$AUTHCERT_PEM" > "$CRT"
+            openssl x509 -in "$CRT" -noout -subject -enddate -fingerprint -sha256
+            echo "ANT_AUTHCERT=-Dauthcert.use=$CRT" >> "$GITHUB_ENV"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "::error::Variável AUTHCERT_PEM não definida: a release sairia sem o certificado embutido."
+            exit 1
+          else
+            echo "::warning::AUTHCERT_PEM não definida: este build não embute o certificado Aproveita."
+          fi
+
       - name: Build pkg (ad-hoc)
-        run: ant pkgbuild
+        run: ant $ANT_AUTHCERT pkgbuild
 
       - name: Build dmg (ad-hoc)
-        run: ant dmg
+        run: ant $ANT_AUTHCERT dmg
 
       # ── Descomente quando tiver Apple Developer ID ──────────────────────
       # - name: Notarize pkg
