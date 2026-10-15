@@ -40,6 +40,32 @@ O processo deve continuar ativo para manter os serviços WebSocket disponíveis.
 O comando `ant clean` remove `out/`; não coloque alterações manuais ou arquivos
 persistentes nesse diretório.
 
+## Pacote com o certificado Aproveita
+
+Os alvos de empacotamento (`makeself`, `nsis`, `pkgbuild`) passam por `distribute`,
+que aceita a propriedade opcional `authcert.use`, apontando para um arquivo `.crt`
+(o certificado **público**):
+
+```bash
+ant -Dauthcert.use=/caminho/aproveita.crt makeself
+```
+
+Ela copia o arquivo para `out/dist/override.crt`. Ao iniciar, o agente o carrega como
+CA confiável (`Certificate.scanAdditionalCAs`). Um certificado igual a uma CA
+confiável é tratado como válido e é gravado na lista de permitidos na primeira
+avaliação (`Certificate`), então solicitações assinadas com a chave correspondente
+não aparecem como "não confiáveis" e o diálogo **Autorizar** não é exibido.
+
+No CI (`.github/workflows/build.yml`) o certificado vem da **variável** do
+repositório `AUTHCERT_PEM` (texto PEM do certificado público; não é um secret).
+Em release (tag `v*`) a variável é obrigatória: sem ela o build falha, para não
+publicar um instalador sem o certificado. Em PR o build segue com um aviso. Depois
+do build, o job confere que `override.crt` é idêntico ao certificado informado. O
+repositório não versiona o certificado nem chaves.
+
+Para trocar o certificado, atualize `AUTHCERT_PEM` e publique uma nova versão; as
+lojas passam a ter o novo certificado ao atualizar o agente.
+
 ## Testes
 
 Compile e rode a suíte TestNG:
@@ -57,7 +83,7 @@ ant -Dtestng.pattern="**/utils/**" unit-tests
 
 Testes de integração podem requerer navegadores, ambiente gráfico, serviços do
 SO ou hardware. Os jobs do CI também fazem testes e empacotamento por plataforma;
-consulte `.github/workflows/build.yaml` e `build.xml` para requisitos atuais.
+consulte `.github/workflows/build.yml` e `build.xml` para requisitos atuais.
 Registre o que foi executado e não descreva uma compilação como validação de
 comportamento de hardware ou de UI.
 
